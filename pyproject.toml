@@ -1,0 +1,94 @@
+[project]
+name = "jmcomic-ai"
+version = "0.0.1"
+description = "AI-powered JMComic crawler with MCP server and skills management for seamless AI agent integration"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"  # Minimum: 3.10, Recommended: 3.12+
+authors = [
+    { name = "hect0x7", email = "93357912+hect0x7@users.noreply.github.com" }
+]
+keywords = ["jmcomic", "mcp", "ai", "agent", "crawler", "manga", "comic"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "jmcomic>=2.6.11",
+    "mcp",
+    "typer",
+]
+
+[project.urls]
+Homepage = "https://github.com/hect0x7/jmcomic-ai"
+Repository = "https://github.com/hect0x7/jmcomic-ai"
+Issues = "https://github.com/hect0x7/jmcomic-ai/issues"
+Documentation = "https://github.com/hect0x7/jmcomic-ai#readme"
+
+[project.scripts]
+jmcomic-ai = "jmcomic_ai.cli:app"
+jmai = "jmcomic_ai.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jmcomic_ai"]
+
+[tool.hatch.build.targets.sdist]
+# 只包含必要的文件
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+    "/CHANGELOG.md",
+]
+# 排除不必要的文件和目录
+exclude = [
+    "/.github",
+    "/tests",
+    "/images",
+    "/reference",
+    "/.gitignore",
+    "/.pre-commit-config.yaml",
+    "/AGENT.md",
+    "/uv.lock",
+    "*.log",
+    "/.pytest_cache",
+    "/.ruff_cache",
+    "/.venv",
+    "/.idea",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.11",
+    "mypy>=1.8.0",
+]

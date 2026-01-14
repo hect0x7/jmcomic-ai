@@ -1,0 +1,616 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "JmOption Configuration",
+    "description": "Complete configuration schema for JMComic-Crawler-Python",
+    "type": "object",
+    "properties": {
+        "version": {
+            "type": "string",
+            "description": "Configuration version string",
+            "examples": [
+                "2.0"
+            ]
+        },
+        "log": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable or disable jmcomic logging output"
+        },
+        "client": {
+            "type": "object",
+            "description": "Client configuration",
+            "properties": {
+                "impl": {
+                    "type": "string",
+                    "enum": [
+                        "html",
+                        "api"
+                    ],
+                    "description": "Client implementation type. 'html' for web client (IP restricted but efficient), 'api' for APP client (no IP restriction, better compatibility)"
+                },
+                "domain": {
+                    "type": "object",
+                    "description": "Domain configuration for different client implementations",
+                    "properties": {
+                        "html": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "List of domains for HTML client",
+                            "examples": [
+                                [
+                                    "18comic.vip",
+                                    "18comic.org"
+                                ]
+                            ]
+                        },
+                        "api": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "List of domains for API client",
+                            "examples": [
+                                [
+                                    "www.jmapiproxyxxx.vip"
+                                ]
+                            ]
+                        }
+                    }
+                },
+                "retry_times": {
+                    "type": "integer",
+                    "default": 5,
+                    "minimum": 0,
+                    "description": "Number of retry attempts on request failure"
+                },
+                "postman": {
+                    "type": "object",
+                    "description": "Request configuration",
+                    "properties": {
+                        "meta_data": {
+                            "type": "object",
+                            "properties": {
+                                "proxies": {
+                                    "oneOf": [
+                                        {
+                                            "type": "null",
+                                            "description": "No proxy"
+                                        },
+                                        {
+                                            "type": "string",
+                                            "enum": [
+                                                "system",
+                                                "clash",
+                                                "v2ray"
+                                            ],
+                                            "description": "Predefined proxy type or proxy address (e.g., '127.0.0.1:7890')"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "http": {
+                                                    "type": "string",
+                                                    "description": "HTTP proxy address"
+                                                },
+                                                "https": {
+                                                    "type": "string",
+                                                    "description": "HTTPS proxy address"
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "default": "system",
+                                    "description": "Proxy configuration. 'system' uses system proxy, null disables proxy"
+                                },
+                                "cookies": {
+                                    "type": [
+                                        "object",
+                                        "null"
+                                    ],
+                                    "description": "Account cookies for login. Only AVS cookie is needed. Must match the domain being accessed",
+                                    "properties": {
+                                        "AVS": {
+                                            "type": "string",
+                                            "description": "AVS cookie value from browser"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "download": {
+            "type": "object",
+            "description": "Download configuration",
+            "properties": {
+                "cache": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Skip downloading files that already exist on disk"
+                },
+                "image": {
+                    "type": "object",
+                    "description": "Image download settings",
+                    "properties": {
+                        "decode": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Decode scrambled images from JMComic"
+                        },
+                        "suffix": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "default": null,
+                            "description": "Force convert all images to specified format (e.g., '.jpg')",
+                            "examples": [
+                                ".jpg",
+                                ".png"
+                            ]
+                        }
+                    }
+                },
+                "threading": {
+                    "type": "object",
+                    "description": "Concurrency settings",
+                    "properties": {
+                        "image": {
+                            "type": "integer",
+                            "default": 30,
+                            "minimum": 1,
+                            "maximum": 50,
+                            "description": "Max concurrent image downloads (JMComic web allows max 50)"
+                        },
+                        "photo": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Max concurrent chapter downloads (defaults to CPU thread count)"
+                        }
+                    }
+                }
+            }
+        },
+        "dir_rule": {
+            "type": "object",
+            "description": "Directory and file naming rules",
+            "properties": {
+                "base_dir": {
+                    "type": "string",
+                    "description": "Root directory for downloads. Supports environment variables (e.g., '${JM_DIR}/downloads/')",
+                    "examples": [
+                        "D:/downloads/jmcomic/",
+                        "${JM_DIR}/downloads/"
+                    ]
+                },
+                "rule": {
+                    "type": "string",
+                    "description": "Directory structure DSL. Start with 'Bd' (base dir), use '/' or '_' to separate levels. Use Pxxx for photo properties, Axxx for album properties. Supports f-string syntax (e.g., 'Bd / Aauthor / (JM{Aid}-{Pindex})-{Pname}')",
+                    "default": "Bd / Ptitle",
+                    "examples": [
+                        "Bd / Ptitle",
+                        "Bd / Aid / Pindex",
+                        "Bd / Aauthor / (JM{Aid}-{Pindex})-{Pname}"
+                    ]
+                },
+                "normalize_zh": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "enum": [
+                        "zh-cn",
+                        "zh-tw",
+                        null
+                    ],
+                    "default": null,
+                    "description": "Chinese character normalization. 'zh-cn' for simplified, 'zh-tw' for traditional, null for no conversion. Requires 'zhconv' library"
+                }
+            }
+        },
+        "plugins": {
+            "type": "object",
+            "description": "Plugin configurations. Plugins are executed at different lifecycle stages",
+            "properties": {
+                "after_init": {
+                    "type": "array",
+                    "description": "Plugins executed after initialization",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "before_album": {
+                    "type": "array",
+                    "description": "Plugins executed before downloading an album",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "after_album": {
+                    "type": "array",
+                    "description": "Plugins executed after downloading an album",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "before_photo": {
+                    "type": "array",
+                    "description": "Plugins executed before downloading a chapter",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "after_photo": {
+                    "type": "array",
+                    "description": "Plugins executed after downloading a chapter",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "main": {
+                    "type": "array",
+                    "description": "Main plugins",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "plugin": {
+            "type": "object",
+            "required": [
+                "plugin"
+            ],
+            "properties": {
+                "plugin": {
+                    "type": "string",
+                    "description": "Plugin name",
+                    "enum": [
+                        "usage_log",
+                        "login",
+                        "find_update",
+                        "image_suffix_filter",
+                        "replace_path_string",
+                        "client_proxy",
+                        "auto_set_browser_cookies",
+                        "jm_server",
+                        "subscribe_album_update",
+                        "download_cover",
+                        "zip",
+                        "delete_duplicated_files",
+                        "send_qq_email",
+                        "favorite_folder_export",
+                        "skip_photo_with_few_images",
+                        "img2pdf",
+                        "long_img"
+                    ]
+                },
+                "log": {
+                    "type": "boolean",
+                    "description": "Enable logging for this plugin"
+                },
+                "kwargs": {
+                    "type": "object",
+                    "description": "Plugin-specific arguments. Supports environment variables (e.g., '${ENV_VAR}')"
+                }
+            }
+        },
+        "usage_log_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "usage_log"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "properties": {
+                                "interval": {
+                                    "type": "number",
+                                    "description": "Logging interval in seconds"
+                                },
+                                "enable_warning": {
+                                    "type": "boolean",
+                                    "description": "Enable warnings for high resource usage"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "login_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "login"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "required": [
+                                "username",
+                                "password"
+                            ],
+                            "properties": {
+                                "username": {
+                                    "type": "string",
+                                    "description": "Username"
+                                },
+                                "password": {
+                                    "type": "string",
+                                    "description": "Password"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "find_update_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "find_update"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "description": "Map of album_id to last_downloaded_photo_id",
+                            "patternProperties": {
+                                "^[0-9]+$": {
+                                    "type": "integer"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "download_cover_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "download_cover"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "properties": {
+                                "size": {
+                                    "type": "string",
+                                    "description": "Cover size (e.g., '_3x4' for search page size)"
+                                },
+                                "dir_rule": {
+                                    "type": "object",
+                                    "properties": {
+                                        "base_dir": {
+                                            "type": "string"
+                                        },
+                                        "rule": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "zip_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "zip"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "properties": {
+                                "level": {
+                                    "type": "string",
+                                    "enum": [
+                                        "photo",
+                                        "album"
+                                    ],
+                                    "description": "Compression level: 'photo' for per-chapter, 'album' for entire album"
+                                },
+                                "filename_rule": {
+                                    "type": "string",
+                                    "description": "Naming rule for zip files. Use Pxxx for photo level, Axxx for album level"
+                                },
+                                "zip_dir": {
+                                    "type": "string",
+                                    "description": "Directory to store zip files (deprecated, use dir_rule instead)"
+                                },
+                                "suffix": {
+                                    "type": "string",
+                                    "enum": [
+                                        "zip",
+                                        "7z"
+                                    ],
+                                    "default": "zip",
+                                    "description": "Compression format"
+                                },
+                                "dir_rule": {
+                                    "type": "object",
+                                    "description": "New configuration replacing zip_dir and filename_rule",
+                                    "properties": {
+                                        "base_dir": {
+                                            "type": "string"
+                                        },
+                                        "rule": {
+                                            "type": "string"
+                                        }
+                                    }
+                                },
+                                "delete_original_file": {
+                                    "type": "boolean",
+                                    "description": "Delete original files after successful compression"
+                                },
+                                "encrypt": {
+                                    "type": "object",
+                                    "description": "Encryption settings",
+                                    "properties": {
+                                        "impl": {
+                                            "type": "string",
+                                            "enum": [
+                                                "zip",
+                                                "7z"
+                                            ],
+                                            "description": "Encryption implementation (7z encrypts file headers)"
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "random"
+                                            ],
+                                            "description": "Password type: 'random' for auto-generated password"
+                                        },
+                                        "password": {
+                                            "type": "string",
+                                            "description": "Fixed password (mutually exclusive with 'type')"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "send_qq_email_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "send_qq_email"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "required": [
+                                "msg_from",
+                                "msg_to",
+                                "password"
+                            ],
+                            "properties": {
+                                "msg_from": {
+                                    "type": "string",
+                                    "description": "Sender email address"
+                                },
+                                "msg_to": {
+                                    "type": "string",
+                                    "description": "Recipient email address"
+                                },
+                                "password": {
+                                    "type": "string",
+                                    "description": "Sender's authorization code (not login password)"
+                                },
+                                "title": {
+                                    "type": "string",
+                                    "description": "Email subject"
+                                },
+                                "content": {
+                                    "type": "string",
+                                    "description": "Email content"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "img2pdf_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "img2pdf"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "required": [
+                                "pdf_dir",
+                                "filename_rule"
+                            ],
+                            "properties": {
+                                "pdf_dir": {
+                                    "type": "string",
+                                    "description": "Directory to store PDF files"
+                                },
+                                "filename_rule": {
+                                    "type": "string",
+                                    "description": "PDF naming rule. Use Pxxx for after_photo, Axxx for after_album"
+                                },
+                                "encrypt": {
+                                    "type": "object",
+                                    "properties": {
+                                        "password": {
+                                            "type": "string",
+                                            "description": "PDF password"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "skip_photo_with_few_images_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "skip_photo_with_few_images"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "required": [
+                                "at_least_image_count"
+                            ],
+                            "properties": {
+                                "at_least_image_count": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Minimum number of images required to download a chapter"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

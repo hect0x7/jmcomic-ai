@@ -1,0 +1,3 @@
+"""
+JMComic AI Test Suite
+"""
