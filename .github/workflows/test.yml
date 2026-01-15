@@ -1,0 +1,60 @@
+name: Run Tests
+
+on:
+  schedule:
+    # 每天UTC时间0点运行（北京时间8点）
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+  push:
+    branches: ["dev"]
+    paths:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+      - '.github/workflows/test.yml'
+      - 'pyproject.toml'
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras --dev
+
+      - name: Install project
+        run: |
+          uv pip install -e .
+
+      - name: Run tests with unittest
+        run: |
+          cd tests
+          uv run python -m unittest discover -v
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            jmcomic_ai.log
+            tests/jmcomic_ai.log
+          if-no-files-found: ignore
