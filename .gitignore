@@ -78,3 +78,4 @@ coverage.xml
 # Local copy of jmcomic source for development reference only
 # This directory is ignored and should be manually cloned by developers.
 reference/jmcomic_src/
+.agent

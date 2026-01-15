@@ -9,6 +9,48 @@ todo
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.0.3] - 2026-01-15
+
+### Added
+- 🔖 新增 `jmai --version` / `jmai -v` 选项，可查看当前安装版本。
+- 📋 新增版本一致性检查脚本 `.github/check_version.py`，确保 `pyproject.toml`、`__init__.py`、`SKILL.md` 三处版本同步。
+- 🤖 发布工作流新增版本一致性校验步骤，版本不匹配时阻断发布。
+
+### Changed
+- 📚 重写 `CONTRIBUTING.md` 安装指南，新增 `uv run` 作为最推荐的开发方式（方案 0），调整原有方案优先级。
+- 📝 更新 `AGENT.md`，补充完整的版本管理规范与手动校验命令。
+
+### Fixed
+- 🐛 修复 `jmai skills install/uninstall` 缺少路径提示的问题，现在会明确打印预设路径或用户指定路径。
+
+---
+
+## [0.0.2] - 2026-01-15
+
+### Added
+- 🧰 新增 Skills 脚本套件，位于 `scripts/` 目录：
+  - `ranking_tracker.py`：排行榜追踪与导出。
+  - `album_info.py`：本子详情查询。
+  - `batch_download.py`：批量下载。
+  - `download_covers.py`：封面下载。
+  - `download_photo.py`：单章下载。
+  - `search_export.py`：搜索结果导出。
+  - `doctor.py`：环境诊断工具。
+  - `validate_config.py`：配置校验工具。
+- 🚀 新增 GitHub Actions 发布工作流 `.github/workflows/publish.yml`，支持基于 tag 自动发布至 PyPI。
+- 📜 新增 `.github/release.py`，用于从 Git tag 解析版本与发布说明。
+
+### Changed
+- 🗂️ 重构 Skills 目录结构：
+  - `resources/` → `references/`
+  - `option_schema.json` → `assets/option_schema.json`
+- 📖 大幅扩展 `SKILL.md`，补充脚本使用说明与工作流示例。
+
+### Removed
+- 🗑️ 移除 `scripts/usage_example.py`（已被新脚本套件取代）。
+
+---
+
 ## [0.1.0] - 2026-01-14
 
 ### Added

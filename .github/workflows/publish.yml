@@ -27,6 +27,10 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Check Version Consistency
+        run: |
+          python .github/check_version.py
+
       - name: Parse Tag & Body
         id: tb
         run: |

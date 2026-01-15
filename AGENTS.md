@@ -66,7 +66,27 @@ When asked to add a new feature or tool, follow these steps:
 - Run Lint: `uv run ruff check src`
 - Format: `uv run ruff format src`
 - Update Dependencies: `uv sync`
+- Check Version: `python .github/check_version.py`
+
+## 📌 Version Management
+
+The version number must be kept consistent across the following three locations:
+
+| File | Format | Purpose |
+| :--- | :--- | :--- |
+| `pyproject.toml` | `version = "x.y.z"` | **Source of truth** for builds and releases |
+| `src/jmcomic_ai/__init__.py` | `__version__ = "x.y.z"` | Displayed by `jmai -v` CLI output |
+| `src/jmcomic_ai/skills/jmcomic/SKILL.md` | `version: "x.y.z"` | AI Skills metadata |
+
+### Automatic Validation
+The publish workflow (`.github/workflows/publish.yml`) runs version consistency checks before every release. If versions mismatch, the workflow fails and blocks the release.
+
+### Manual Validation
+During local development, you can run the following command to check version sync status:
+```bash
+python .github/check_version.py
+```
 
 ---
 
-*Note: This guide is intended for AI-to-AI collaboration. If you are a human developer, please refer to [CONTRIBUTING.md](./CONTRIBUTING.md).*
+*Note: This guide is intended for AI-to-AI collaboration. If you are a human developer, please refer to [CONTRIBUTING.md](./.github/CONTRIBUTING.md).*
