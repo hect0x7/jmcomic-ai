@@ -46,9 +46,8 @@ jobs:
           uv sync
 
       - name: Run tests with unittest
-        run: |
-          cd tests
-          uv run python -m unittest discover -v
+        working-directory: tests
+        run: uv run python -m unittest discover -v
 
       - name: Upload test logs on failure
         if: failure()
