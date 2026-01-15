@@ -2,8 +2,15 @@ from enum import Enum
 from pathlib import Path
 
 import typer
-
+from typing import Optional
+from jmcomic_ai import __version__
 from jmcomic_ai.core import JmcomicService
+
+def version_callback(value: bool):
+    if value:
+        typer.echo(f"jmai version: {__version__}")
+        raise typer.Exit()
+
 
 app = typer.Typer(
     name="jmcomic-ai",
@@ -11,6 +18,23 @@ app = typer.Typer(
     add_completion=True,
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def main(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        "-v",
+        help="Show the version and exit.",
+        callback=version_callback,
+        is_eager=True,
+    ),
+):
+    """
+    JMComic AI Agent Interface
+    """
+    pass
 
 
 class TransportType(str, Enum):
@@ -97,8 +121,10 @@ def install_skills(
     if target_dir is None:
         # Default to ~/.claude/skills/jmcomic (Standard for Claude Desktop)
         target_dir = Path.home() / ".claude" / "skills" / "jmcomic"
-
-    typer.echo(f"Target directory: {target_dir.resolve()}")
+        typer.secho(f"[*] 未指定安装路径, 将使用预设路径: {target_dir}", fg=typer.colors.CYAN, err=True)
+        typer.secho("[*] 提示: 您可以使用 'jmai skills install <PATH>' 来安装到特定路径", fg=typer.colors.CYAN, err=True)
+    else:
+        typer.echo(f"[*] 安装到指定路径: {target_dir.resolve()}", err=True)
 
     # 1. Confirmation (unless -y is passed)
     if not yes:
@@ -143,6 +169,9 @@ def uninstall_skills(
     if target_dir is None:
         # Default to ~/.claude/skills/jmcomic
         target_dir = Path.home() / ".claude" / "skills" / "jmcomic"
+        typer.secho(f"[*] 未指定卸载路径，将从预设路径卸载: {target_dir}", fg=typer.colors.YELLOW, err=True)
+    else:
+        typer.echo(f"[*] 从指定路径卸载: {target_dir.resolve()}", err=True)
 
     if not target_dir.exists():
         typer.echo(f"Target directory {target_dir} does not exist.")
