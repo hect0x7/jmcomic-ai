@@ -332,4 +332,4 @@ plugins:
 
 ---
 
-For the complete list of plugins and their parameters, see `option_schema.json`.
+For the complete list of plugins and their parameters, see `assets/option_schema.json`.

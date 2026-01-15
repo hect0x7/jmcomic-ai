@@ -80,7 +80,7 @@ def _register_resources(mcp_server: FastMCP):
     @mcp_server.resource("jmcomic://option/schema")
     def get_option_schema() -> str:
         """Return the JSON Schema for JmOption"""
-        schema_path = skills_dir / "option_schema.json"
+        schema_path = skills_dir / "assets" / "option_schema.json"
         if schema_path.exists():
             return schema_path.read_text(encoding="utf-8")
         return "{}"
@@ -88,7 +88,7 @@ def _register_resources(mcp_server: FastMCP):
     @mcp_server.resource("jmcomic://option/reference")
     def get_option_reference() -> str:
         """Return the option reference documentation"""
-        ref_path = skills_dir / "resources" / "reference.md"
+        ref_path = skills_dir / "references" / "reference.md"
         if ref_path.exists():
             return ref_path.read_text(encoding="utf-8")
         return "No reference documentation available"
