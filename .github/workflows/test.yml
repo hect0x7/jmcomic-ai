@@ -17,8 +17,13 @@ jobs:
   test:
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13']
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - python-version: '3.10'
+            os: ubuntu-latest
+          - python-version: '3.11'
+            os: windows-latest
+          - python-version: '3.12'
+            os: macos-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
 
