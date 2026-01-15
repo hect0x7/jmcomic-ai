@@ -18,7 +18,7 @@ todo
 
 ### Changed
 - 📚 重写 `CONTRIBUTING.md` 安装指南，新增 `uv run` 作为最推荐的开发方式（方案 0），调整原有方案优先级。
-- 📝 更新 `AGENT.md`，补充完整的版本管理规范与手动校验命令。
+- 📝 更新 `AGENTS.md`，补充完整的版本管理规范与手动校验命令。
 
 ### Fixed
 - 🐛 修复 `jmai skills install/uninstall` 缺少路径提示的问题，现在会明确打印预设路径或用户指定路径。
