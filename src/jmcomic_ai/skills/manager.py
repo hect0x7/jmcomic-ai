@@ -41,8 +41,22 @@ class SkillManager:
             "target_dir": target_dir,
             "skill_target_dir": skill_target_dir,
             "exists": skill_target_dir.exists(),
-            "files": self._list_relative_files(skill_target_dir) if skill_target_dir.exists() else []
+            "files": self._list_removable_files(skill_target_dir) if skill_target_dir.exists() else []
         }
+
+    def _list_removable_files(self, skill_target_dir: Path) -> list[str]:
+        """List files in skill_target_dir that also exist in skills_source_dir"""
+        results = []
+        parent_name = skill_target_dir.name
+        for root, _, files in os.walk(self.skills_source_dir):
+            rel_root = Path(root).relative_to(self.skills_source_dir)
+            for file in files:
+                if file.startswith("__") or file.endswith(".pyc"):
+                    continue
+                dst_file = skill_target_dir / rel_root / file
+                if dst_file.exists():
+                    results.append(str(Path(parent_name) / rel_root / file))
+        return sorted(results)
 
     def has_conflicts(self, target_dir: Path) -> bool:
         """Check if any files in source exist in target"""
@@ -55,6 +69,8 @@ class SkillManager:
             target_root = skill_target_dir / rel_root
 
             for file in files:
+                if file.startswith("__") or file.endswith(".pyc"):
+                    continue
                 if (target_root / file).exists():
                     return True
         return False
