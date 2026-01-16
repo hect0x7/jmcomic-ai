@@ -210,7 +210,7 @@ class JmcomicService:
         order_by: str = "latest",
         time_range: str = "all",
         category: str = "all",
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """
         Search for albums/comics with advanced filtering options.
 
@@ -243,7 +243,7 @@ class JmcomicService:
         self.logger.info(f"Search finished: keyword={keyword}, results={len(search_page)}")
         return self._parse_search_page(search_page)
 
-    def get_ranking(self, period: str = "day", page: int = 1) -> list[dict[str, Any]]:
+    def get_ranking(self, period: str = "day", page: int = 1) -> dict[str, Any]:
         """
         Get trending/popular albums from ranking lists.
 
@@ -357,7 +357,7 @@ class JmcomicService:
         category: str = JmMagicConstants.CATEGORY_ALL,
         page: int = 1,
         sort_by: str = JmMagicConstants.ORDER_BY_LATEST,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """
         Browse albums by category with sorting options.
 
