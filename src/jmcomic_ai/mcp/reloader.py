@@ -64,6 +64,7 @@ def run_with_reloader(watch_path: Path) -> None:
                 time.sleep(2)
                 start_process()
     except KeyboardInterrupt:
+        print("\n[*] Stopping hot-reloader and server...", file=sys.stderr)
         observer.stop()
         if process:
             process.terminate()

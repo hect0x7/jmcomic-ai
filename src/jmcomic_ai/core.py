@@ -76,22 +76,28 @@ class JmcomicService:
     def _setup_logging(self):
         """Setup logging to both file and console"""
         log_file = Path.cwd() / "jmcomic_ai.log"
+        self.logger = logging.getLogger("jmcomic_ai")
+        self.logger.setLevel(logging.INFO)
         
-        # Configure root logger to output to file
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler(str(log_file), encoding='utf-8')
-            ]
+        # Common formatter for file logging
+        file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+        # 1. File Handler
+        has_file_handler = any(
+            isinstance(handler, logging.FileHandler) and handler.baseFilename == str(log_file.absolute())
+            for handler in self.logger.handlers
         )
         
-        self.logger = logging.getLogger("jmcomic_ai")
+        if not has_file_handler:
+            file_handler = logging.FileHandler(str(log_file), encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(file_formatter)
+            self.logger.addHandler(file_handler)
         
-        # Add a StreamHandler for console output with a cleaner format
+        # 2. Console Handler (StreamHandler)
         # Check if a StreamHandler already exists to avoid duplicate handlers
         has_console_handler = any(
-            isinstance(handler, logging.StreamHandler) and handler.stream == sys.stderr
+            isinstance(handler, logging.StreamHandler) and getattr(handler, 'stream', None) == sys.stderr
             for handler in self.logger.handlers
         )
         

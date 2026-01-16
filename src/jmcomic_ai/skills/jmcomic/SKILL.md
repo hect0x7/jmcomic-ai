@@ -21,10 +21,24 @@ Activate this skill when the user wants to:
 - Configure download settings (paths, concurrency, proxies)
 
 ## Core Capabilities
-
+ 
 This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
+ 
+### Data Structure Notes
+
+Most search and browsing tools (e.g., `search_album`, `get_ranking`, `get_category_list`) return a consistent structure that supports pagination:
+
+```json
+{
+  "albums": [ ... ],
+  "total_count": 1234
+}
+```
+
+**`total_count`** provides the total number of items available across all pages, allowing you to calculate the number of remaining pages and decide if further searching is needed.
 
 ## Configuration Reference
+
 
 For detailed configuration options, refer to:
 - **`references/reference.md`**: Human-readable configuration guide
