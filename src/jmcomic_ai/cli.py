@@ -9,6 +9,12 @@ from jmcomic_ai.core import JmcomicService, resolve_option_path
 
 
 def version_callback(value: bool):
+    """
+    Callback function to display version and exit.
+
+    Args:
+        value: If True, displays version and exits the program.
+    """
     if value:
         typer.echo(f"jmai version: {__version__}")
         raise typer.Exit()

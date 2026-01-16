@@ -25,7 +25,27 @@ DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
 
 def resolve_option_path(cli_path: str | None = None, logger: logging.Logger | None = None) -> Path:
     """
-    Resolve jmcomic option path (Priority: CLI > Env > Default)
+    Resolve jmcomic option path with priority: CLI > Environment Variable > Default.
+
+    This function determines the configuration file path using a three-tier resolution strategy:
+    1. CLI argument (highest priority)
+    2. Environment variable (JM_OPTION_PATH)
+    3. Default path (~/.jmcomic/option.yml)
+
+    Args:
+        cli_path: Optional path provided via CLI argument. If specified, this takes highest priority.
+        logger: Optional logger instance for logging resolution steps. If None, uses default logger.
+
+    Returns:
+        Resolved absolute Path to the option file.
+
+    Examples:
+        >>> # Use default path
+        >>> path = resolve_option_path()
+        >>> # Use CLI-provided path
+        >>> path = resolve_option_path("/custom/path/option.yml")
+        >>> # Use with custom logger
+        >>> path = resolve_option_path(logger=my_logger)
     """
     if logger is None:
         logger = logging.getLogger("jmcomic_ai")
