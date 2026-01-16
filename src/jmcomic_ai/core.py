@@ -79,36 +79,40 @@ class JmcomicService:
         self.logger = logging.getLogger("jmcomic_ai")
         self.logger.setLevel(logging.INFO)
         
-        # Common formatter for file logging
-        file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        # 1. Ensure Root Logger has basic configuration (for 3rd party libs like mcp, uvicorn, jmcomic)
+        # We use a formatter similar to what was there before
+        root_logger = logging.getLogger()
+        if not root_logger.handlers:
+            root_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            # Root File Handler
+            try:
+                root_file_handler = logging.FileHandler(str(log_file), encoding='utf-8')
+                root_file_handler.setFormatter(root_formatter)
+                root_logger.addHandler(root_file_handler)
+                root_logger.setLevel(logging.INFO)
+            except Exception:
+                pass # Fallback for read-only filesystems in CI
 
-        # 1. File Handler
-        has_file_handler = any(
-            isinstance(handler, logging.FileHandler) and handler.baseFilename == str(log_file.absolute())
-            for handler in self.logger.handlers
-        )
-        
-        if not has_file_handler:
-            file_handler = logging.FileHandler(str(log_file), encoding='utf-8')
-            file_handler.setLevel(logging.INFO)
-            file_handler.setFormatter(file_formatter)
-            self.logger.addHandler(file_handler)
-        
-        # 2. Console Handler (StreamHandler)
+        # 2. Configure jmcomic_ai named logger (for nicer CLI output)
         # Check if a StreamHandler already exists to avoid duplicate handlers
         has_console_handler = any(
-            isinstance(handler, logging.StreamHandler) and getattr(handler, 'stream', None) == sys.stderr
+            isinstance(handler, logging.StreamHandler) and getattr(handler, 'stream', None) in (sys.stderr, sys.stdout)
             for handler in self.logger.handlers
         )
         
         if not has_console_handler:
-            console_handler = logging.StreamHandler()
+            console_handler = logging.StreamHandler(sys.stderr)
             console_handler.setLevel(logging.INFO)
             console_formatter = logging.Formatter("[*] %(message)s")
             console_handler.setFormatter(console_formatter)
             self.logger.addHandler(console_handler)
         
+        # Ensure our named logger doesn't propagate to root if handlers are present on both 
+        # but in our case we WANT it to go to file (via root) and stderr (via self).
+        # To avoid double printing in file, we check if root already has a file handler.
+        
         self.logger.info(f"Logging to file: {log_file}")
+        sys.stderr.flush()
 
     def reload_option(self):
         """

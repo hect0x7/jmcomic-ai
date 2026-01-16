@@ -19,7 +19,7 @@ def _is_public_method(name: str, method: Any) -> bool:
         return False
 
     # 排除注释里有约定非工具的方法
-    if "[not a tool]" in method.__doc__:
+    if method.__doc__ and "[not a tool]" in method.__doc__:
         return False
 
     return True
@@ -68,10 +68,10 @@ def _register_service_tools(mcp_server: FastMCP, service: JmcomicService):
         # 注册为 MCP tool
         mcp_server.tool()(tool_func)
 
-        print(f"[+] Registered tool: {name}")
+        service.logger.info(f"Registered tool: {name}")
 
 
-def _register_resources(mcp_server: FastMCP):
+def _register_resources(mcp_server: FastMCP, service: JmcomicService):
     """注册 MCP Resources，让 AI 可以查阅配置文档"""
     from pathlib import Path
 
@@ -101,7 +101,7 @@ def _register_resources(mcp_server: FastMCP):
             return skill_path.read_text(encoding="utf-8")
         return "No skill documentation available"
 
-    print("[+] Registered 3 MCP resources")
+    service.logger.info("Registered 3 MCP resources")
 
 
 def run_server(transport: str, service: JmcomicService, host: str = "127.0.0.1", port: int = 8000):
@@ -113,7 +113,7 @@ def run_server(transport: str, service: JmcomicService, host: str = "127.0.0.1",
     _register_service_tools(mcp_server, service)
 
     # 注册 MCP Resources
-    _register_resources(mcp_server)
+    _register_resources(mcp_server, service)
 
     # 映射 transport 参数
     # CLI 使用简短的 "stdio"/"sse"/"http"，FastMCP 需要完整的 "stdio"/"streamable-http"
