@@ -79,3 +79,10 @@ coverage.xml
 # This directory is ignored and should be manually cloned by developers.
 reference/jmcomic_src/
 .agent
+
+# --- Post-process outputs ---
+*.pdf
+*.zip
+*.png
+[0-9]*/
+temp_test_skills/

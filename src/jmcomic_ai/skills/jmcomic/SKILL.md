@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.4"
+  version: "0.0.5"
   dependencies: python>=3.10
 ---
 
@@ -16,11 +16,22 @@ This skill enables you to interact with JMComic (18comic), a popular manga platf
 Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
-- Download entire albums or specific chapters
+- Download entire albums or specific chapters (**Now returns the predicted download path**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
+- **NEW**: Post-process downloaded content (Zip, PDF, LongImage)
 
 ## Core Capabilities
+
+### 🛠️ Post-Processing (New in 0.0.6)
+
+This skill now supports advanced post-processing of downloaded manga. These tools allow you to transform discrete image files into more user-friendly formats:
+
+- **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file. Supports **AES Encryption** for security.
+- **📄 PDF Conversion**: Merge all images of an album into a single, high-quality PDF document. Perfect for mobile reading.
+- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image (vertical scroll mode).
+
+**Workflow Suggestion**: Use `download_album` first to ensure images are on disk, then call `post_process` to package them as needed.
  
 This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
  
@@ -256,6 +267,27 @@ python scripts/ranking_tracker.py --period day --output ranking.json --add-times
 - ✅ Export to CSV or JSON with timestamps
 - ✅ Track all periods at once with `--all`
 - ✅ Useful for trend analysis and discovering popular content
+
+### 🛠️ `post_process.py` - Post-Processing (Zip, PDF, LongImg)
+
+Transform downloaded images into ZIP, PDF, or Long Images:
+
+```bash
+# Convert album to PDF
+python scripts/post_process.py --id 123456 --type img2pdf
+
+# Pack album into encrypted ZIP and delete original images
+python scripts/post_process.py --id 123456 --type zip --password "my_secret" --delete
+
+# Merge images into a long scroll image
+python scripts/post_process.py --id 123456 --type long_img --outdir ./long_images
+```
+
+**Features**:
+- ✅ Supports ZIP, PDF, and Long Image formats
+- ✅ Option to encrypt output (Zip/PDF)
+- ✅ Automatic cleanup of original files
+- ✅ Custom output directories
 
 ## Important Notes
 

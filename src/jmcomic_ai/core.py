@@ -18,41 +18,63 @@ from jmcomic import (
 )
 
 
-class JmcomicService:
-    ENV_OPTION_PATH = "JM_OPTION_PATH"
-    DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
 
+ENV_OPTION_PATH = "JM_OPTION_PATH"
+DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
+
+
+def resolve_option_path(cli_path: str | None = None, logger: logging.Logger | None = None) -> Path:
+    """
+    Resolve jmcomic option path with priority: CLI > Environment Variable > Default.
+
+    This function determines the configuration file path using a three-tier resolution strategy:
+    1. CLI argument (highest priority)
+    2. Environment variable (JM_OPTION_PATH)
+    3. Default path (~/.jmcomic/option.yml)
+
+    Args:
+        cli_path: Optional path provided via CLI argument. If specified, this takes highest priority.
+        logger: Optional logger instance for logging resolution steps. If None, uses default logger.
+
+    Returns:
+        Resolved absolute Path to the option file.
+
+    Examples:
+        >>> # Use default path
+        >>> path = resolve_option_path()
+        >>> # Use CLI-provided path
+        >>> path = resolve_option_path("/custom/path/option.yml")
+        >>> # Use with custom logger
+        >>> path = resolve_option_path(logger=my_logger)
+    """
+    if logger is None:
+        logger = logging.getLogger("jmcomic_ai")
+
+    # 1. CLI Argument
+    if cli_path:
+        path = Path(cli_path).resolve()
+        logger.info(f"Found via [CLI argument] -> {path}")
+        return path
+    
+    # 2. Environment Variable
+    env_path = os.getenv(ENV_OPTION_PATH)
+    if env_path:
+        path = Path(env_path).resolve()
+        logger.info(f"Found via [Environment variable: {ENV_OPTION_PATH}] -> {path}")
+        return path
+
+    # 3. Default Path
+    logger.info(f"Using [Default path] -> {DEFAULT_OPTION_PATH}")
+    return DEFAULT_OPTION_PATH
+
+
+class JmcomicService:
     def __init__(self, option_path: str | None = None):
         self._setup_logging()
-        self.option_path = self._resolve_option_path(option_path)
+        self.option_path = resolve_option_path(option_path, self.logger)
         self.option = self._load_option()
         self.client = self.option.build_jm_client()
         self._ensure_init()
-
-    def _resolve_option_path(self, cli_path: str | None) -> Path:
-        """
-        [not a tool]
-        """
-        self.logger.info("Resolving jmcomic option path (Priority: CLI > Env > Default)...")
-
-        # 1. CLI Argument
-        if cli_path:
-            path = Path(cli_path).resolve()
-            self.logger.info(f"Found via [CLI argument] -> {path}")
-            return path
-        self.logger.info("CLI argument not provided.")
-
-        # 2. Environment Variable
-        env_path = os.getenv(self.ENV_OPTION_PATH)
-        if env_path:
-            path = Path(env_path).resolve()
-            self.logger.info(f"Found via [Environment variable: {self.ENV_OPTION_PATH}] -> {path}")
-            return path
-        self.logger.info(f"Environment variable {self.ENV_OPTION_PATH} not set.")
-
-        # 3. Default Path
-        self.logger.info(f"Using [Default path] -> {self.DEFAULT_OPTION_PATH}")
-        return self.DEFAULT_OPTION_PATH
 
     def _load_option(self) -> JmOption:
         self.logger.info(f"Loading jmcomic option from: {self.option_path}")
@@ -64,6 +86,7 @@ class JmcomicService:
             default_option.to_file(str(self.option_path))
             self.logger.info("Default option generated and loaded.")
             return default_option
+
 
         option = create_option_by_file(str(self.option_path))
         self.logger.info("Option loaded successfully.")
@@ -290,17 +313,18 @@ class JmcomicService:
             album_id: The album ID to download (e.g., "123456")
 
         Returns:
-            Confirmation message that download has started.
-
-        Note:
-            Download location is determined by the dir_rule option.
-            Check jmcomic_ai.log for download progress and completion status.
+            Confirmation message that download has started, including the expected download path.
         """
         import asyncio
 
+        # 1. Get album metadata to predict download path
+        album = self.get_client().get_album_detail(album_id)
+        # Use native library method to decide the root directory
+        target_path = self.option.dir_rule.decide_album_root_dir(album)
+
         def _bg_download():
             try:
-                self.logger.info(f"Starting download for album {album_id}")
+                self.logger.info(f"Starting download for album {album_id} to {target_path}")
                 self.option.download_album(album_id)
                 self.logger.info(f"Download completed for album {album_id}")
             except Exception as e:
@@ -309,7 +333,7 @@ class JmcomicService:
         # 使用 asyncio.create_task 将下载任务提交到后台执行
         asyncio.create_task(asyncio.to_thread(_bg_download))
 
-        return f"Download started for album {album_id} (Background Task)"
+        return f"Download started for album {album_id}. Expected path: {target_path}"
 
     def download_photo(self, photo_id: str) -> str:
         """
@@ -430,3 +454,82 @@ class JmcomicService:
 
         self.logger.info(f"Cover downloaded for album {album_id} to {cover_path}")
         return f"Cover downloaded to {cover_path}"
+
+    def post_process(self, album_id: str, process_type: str, params: dict[str, Any] | None = None) -> str:
+        """
+        Perform post-processing (Zip, PDF, LongImage) on an already downloaded album.
+
+        This tool leverages jmcomic's native plugin system to process downloaded comic files.
+        It is thread-safe and does not modify the global configuration.
+
+        Args:
+            album_id: The ID of the album to process.
+            process_type: The type of processing to perform. Options: "zip", "img2pdf", "long_img".
+            params: Optional dictionary of parameters for the specific plugin.
+
+        Returns:
+            Success or error message.
+        """
+        from jmcomic import JmAlbumDetail, JmModuleConfig
+
+        self.logger.info(f"Starting post-process '{process_type}' for album {album_id}")
+        
+        try:
+            # 1. Get album metadata
+            album: JmAlbumDetail = self.get_client().get_album_detail(album_id)
+            
+            # 2. Build mock downloader for plugin state
+            class MockDownloader:
+                def __init__(self):
+                    self.download_success_dict = {}
+
+            mock_downloader = MockDownloader()
+            photo_dict = {}
+            total_images = 0
+            
+            for photo in album:
+                photo_dir = self.option.decide_image_save_dir(photo)
+                if not os.path.exists(photo_dir):
+                    continue
+                
+                images = []
+                for file in sorted(os.listdir(photo_dir)):
+                    if file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif')) and not file.startswith('.'):
+                        images.append((os.path.join(photo_dir, file), None))
+                
+                if images:
+                    photo_dict[photo] = images
+                    total_images += len(images)
+            
+            if not photo_dict:
+                return f"Error: No downloaded images found for album {album_id}. Expected path: {self.option.dir_rule.decide_album_root_dir(album)}"
+            
+            mock_downloader.download_success_dict[album] = photo_dict
+            self.logger.info(f"Found {len(photo_dict)} chapters and {total_images} images for post-processing.")
+
+            # 3. Safe Plugin Invocaton (No pollution to self.option)
+            pclass = JmModuleConfig.REGISTRY_PLUGIN.get(process_type)
+            if pclass is None:
+                return f"Error: Plugin '{process_type}' not found."
+
+            # Construct actual params
+            actual_params = params.copy() if params else {}
+            if 'filename_rule' not in actual_params:
+                actual_params['filename_rule'] = 'Aid'
+            
+            # Add required engine data for the plugin
+            actual_params.update({
+                'album': album,
+                'downloader': mock_downloader
+            })
+
+            # Instantiate and invoke
+            plugin = pclass.build(self.option)
+            plugin.invoke(**actual_params)
+
+            self.logger.info(f"Post-process '{process_type}' finished for album {album_id}")
+            return f"Post-process '{process_type}' completed successfully for album {album_id}."
+
+        except Exception as e:
+            self.logger.error(f"Post-process failed: {str(e)}")
+            return f"Post-process failed: {str(e)}"

@@ -1,13 +1,31 @@
----
-todo
----
-
 # Changelog
 
 本文件记录 JMComic AI 的所有重要更新。
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## [0.0.5] - 2026-01-16
+
+### Added
+- 📦 **后处理增强**：集成 `ZipPlugin`、`Img2pdfPlugin` 与 `LongImgPlugin`。支持在下载完成后按需将漫画打包为 ZIP（支持加密）、导出为 PDF 或合并长图。
+- 🔍 **下载路径预判**：`download_album` 现在会预先根据规则计算并返回预期的本地存储目录，极大提升了 AI 代理的上下文感知能力（Observability）。
+- 🌳 新增安装 (`install`) 与卸载 (`uninstall`) 时的文件树预览功能，在执行操作前让用户清晰感知文件变更。
+- 🛡️ 增强卸载安全性：明确区分父目录与技能子目录，增加风险警告提示，并将默认确认行为改为 `False` 以防误删。
+
+### Changed
+- 🛡️ **线程安全优化**：重构 `post_process` 逻辑，通过动态实例化插件彻底废弃了临时修改全局配置的做法，支持高并发处理且无副作用。
+- 🎯 统一 Skills 安装规范：修复路径逻辑，确保技能始终安装在目标目录的同名子目录（如 `jmcomic/`）中。
+- 🌍 国际化：将 CLI 所有交互提示与错误信息统一为英文。
+- 🏗️ 重构 `SkillManager` 核心类，提取公共路径计算与文件扫描逻辑，消除冗余代码。
+
+### Fixed
+- 📝 修复 `uninstall` 命令在目标路径不存在技能时反馈不明确的问题。
+- 🚑 修复 CLI 输出在某些终端下由于 `stderr` 缓冲区导致的提示信息丢失或延迟问题。
+- 🐛 修复 `post_process` 在某些情况下由于 `filename_rule` 缺失导致的 `NoneType` 异常。
+
+
+---
 
 ## [0.0.4] - 2026-01-16
 
@@ -17,6 +35,9 @@ todo
 
 ### Fixed
 - 🐛 修复 `--reload` 模式下主进程与子进程重复初始化并重复打印配置提示的问题，输出更清爽。
+
+
+---
 
 ## [0.0.3] - 2026-01-15
 
@@ -31,6 +52,7 @@ todo
 
 ### Fixed
 - 🐛 修复 `jmai skills install/uninstall` 缺少路径提示的问题，现在会明确打印预设路径或用户指定路径。
+
 
 ---
 
@@ -57,6 +79,8 @@ todo
 
 ### Removed
 - 🗑️ 移除 `scripts/usage_example.py`（已被新脚本套件取代）。
+
+
 
 ---
 
