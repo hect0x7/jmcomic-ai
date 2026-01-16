@@ -2,8 +2,8 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+# Add src to path (traverse up 4 levels from scripts/post_process.py to reach src/)
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from jmcomic_ai.core import JmcomicService
 
