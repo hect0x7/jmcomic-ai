@@ -14,17 +14,22 @@ class SkillManager:
     def _get_skill_target_dir(self, target_dir: Path) -> Path:
         return target_dir / self.skill_name
 
-    def _list_relative_files(self, base_dir: Path) -> list[str]:
-        """List all files in base_dir relative to its parent"""
+    def _iter_relative_paths(self) -> list[Path]:
+        """Iterate through all valid file paths relative to skills_source_dir"""
         results = []
-        parent_name = base_dir.name
-        for root, _, files in os.walk(base_dir):
-            rel_root = Path(root).relative_to(base_dir)
+        for root, _, files in os.walk(self.skills_source_dir):
+            rel_root = Path(root).relative_to(self.skills_source_dir)
             for file in files:
                 if file.startswith("__") or file.endswith(".pyc"):
                     continue
-                results.append(str(Path(parent_name) / rel_root / file))
-        return sorted(results)
+                results.append(rel_root / file)
+        return results
+
+    def _list_relative_files(self, base_dir: Path) -> list[str]:
+        """List all files in base_dir relative to its parent"""
+        parent_name = base_dir.name
+        # Note: SkillManager always assumes traversal is relative to skills_source_dir or equivalent structure
+        return sorted([str(Path(parent_name) / rel_path) for rel_path in self._iter_relative_paths()])
 
     def get_install_preview(self, target_dir: Path) -> dict:
         """Return preview info for installation"""
@@ -46,16 +51,11 @@ class SkillManager:
 
     def _list_removable_files(self, skill_target_dir: Path) -> list[str]:
         """List files in skill_target_dir that also exist in skills_source_dir"""
-        results = []
         parent_name = skill_target_dir.name
-        for root, _, files in os.walk(self.skills_source_dir):
-            rel_root = Path(root).relative_to(self.skills_source_dir)
-            for file in files:
-                if file.startswith("__") or file.endswith(".pyc"):
-                    continue
-                dst_file = skill_target_dir / rel_root / file
-                if dst_file.exists():
-                    results.append(str(Path(parent_name) / rel_root / file))
+        results = []
+        for rel_path in self._iter_relative_paths():
+            if (skill_target_dir / rel_path).exists():
+                results.append(str(Path(parent_name) / rel_path))
         return sorted(results)
 
     def has_conflicts(self, target_dir: Path) -> bool:

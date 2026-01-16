@@ -290,17 +290,18 @@ class JmcomicService:
             album_id: The album ID to download (e.g., "123456")
 
         Returns:
-            Confirmation message that download has started.
-
-        Note:
-            Download location is determined by the dir_rule option.
-            Check jmcomic_ai.log for download progress and completion status.
+            Confirmation message that download has started, including the expected download path.
         """
         import asyncio
 
+        # 1. Get album metadata to predict download path
+        album = self.get_client().get_album_detail(album_id)
+        # Use native library method to decide the root directory
+        target_path = self.option.dir_rule.decide_album_root_dir(album)
+
         def _bg_download():
             try:
-                self.logger.info(f"Starting download for album {album_id}")
+                self.logger.info(f"Starting download for album {album_id} to {target_path}")
                 self.option.download_album(album_id)
                 self.logger.info(f"Download completed for album {album_id}")
             except Exception as e:
@@ -309,7 +310,7 @@ class JmcomicService:
         # 使用 asyncio.create_task 将下载任务提交到后台执行
         asyncio.create_task(asyncio.to_thread(_bg_download))
 
-        return f"Download started for album {album_id} (Background Task)"
+        return f"Download started for album {album_id}. Expected path: {target_path}"
 
     def download_photo(self, photo_id: str) -> str:
         """
@@ -430,3 +431,82 @@ class JmcomicService:
 
         self.logger.info(f"Cover downloaded for album {album_id} to {cover_path}")
         return f"Cover downloaded to {cover_path}"
+
+    def post_process(self, album_id: str, process_type: str, params: dict[str, Any] | None = None) -> str:
+        """
+        Perform post-processing (Zip, PDF, LongImage) on an already downloaded album.
+
+        This tool leverages jmcomic's native plugin system to process downloaded comic files.
+        It is thread-safe and does not modify the global configuration.
+
+        Args:
+            album_id: The ID of the album to process.
+            process_type: The type of processing to perform. Options: "zip", "img2pdf", "long_img".
+            params: Optional dictionary of parameters for the specific plugin.
+
+        Returns:
+            Success or error message.
+        """
+        from jmcomic import JmAlbumDetail, JmModuleConfig
+
+        self.logger.info(f"Starting post-process '{process_type}' for album {album_id}")
+        
+        try:
+            # 1. Get album metadata
+            album: JmAlbumDetail = self.get_client().get_album_detail(album_id)
+            
+            # 2. Build mock downloader for plugin state
+            class MockDownloader:
+                def __init__(self):
+                    self.download_success_dict = {}
+
+            mock_downloader = MockDownloader()
+            photo_dict = {}
+            total_images = 0
+            
+            for photo in album:
+                photo_dir = self.option.decide_image_save_dir(photo)
+                if not os.path.exists(photo_dir):
+                    continue
+                
+                images = []
+                for file in sorted(os.listdir(photo_dir)):
+                    if file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif')) and not file.startswith('.'):
+                        images.append((os.path.join(photo_dir, file), None))
+                
+                if images:
+                    photo_dict[photo] = images
+                    total_images += len(images)
+            
+            if not photo_dict:
+                return f"Error: No downloaded images found for album {album_id}. Expected path: {self.option.dir_rule.decide_album_root_dir(album)}"
+            
+            mock_downloader.download_success_dict[album] = photo_dict
+            self.logger.info(f"Found {len(photo_dict)} chapters and {total_images} images for post-processing.")
+
+            # 3. Safe Plugin Invocaton (No pollution to self.option)
+            pclass = JmModuleConfig.REGISTRY_PLUGIN.get(process_type)
+            if pclass is None:
+                return f"Error: Plugin '{process_type}' not found."
+
+            # Construct actual params
+            actual_params = params.copy() if params else {}
+            if 'filename_rule' not in actual_params:
+                actual_params['filename_rule'] = 'Aid'
+            
+            # Add required engine data for the plugin
+            actual_params.update({
+                'album': album,
+                'downloader': mock_downloader
+            })
+
+            # Instantiate and invoke
+            plugin = pclass.build(self.option)
+            plugin.invoke(**actual_params)
+
+            self.logger.info(f"Post-process '{process_type}' finished for album {album_id}")
+            return f"Post-process '{process_type}' completed successfully for album {album_id}."
+
+        except Exception as e:
+            self.logger.error(f"Post-process failed: {str(e)}")
+            return f"Post-process failed: {str(e)}"

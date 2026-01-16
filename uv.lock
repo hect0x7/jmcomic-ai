@@ -364,7 +364,7 @@ wheels = [
 
 [[package]]
 name = "jmcomic-ai"
-version = "0.0.4"
+version = "0.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "jmcomic" },
