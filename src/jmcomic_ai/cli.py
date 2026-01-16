@@ -82,23 +82,23 @@ def mcp(
         # Print configuration hint
         import json
 
-        typer.echo("\n💡 以下配置可直接复制到您的 MCP 客户端配置文件中 (Cursor/Windsurf/Claude Desktop 等)", err=True)
+        typer.echo("\n💡 Copy and paste the following configuration into your MCP client config (Cursor, Windsurf, Claude Desktop, etc.)", err=True)
 
         if transport == TransportType.stdio:
             config = {"mcpServers": {"jmcomic-ai": {"command": "jmai", "args": ["mcp", "stdio"]}}}
-            typer.echo("\n--- MCP Client Config (stdio 标准输入输出模式) ---", err=True)
+            typer.echo("\n--- MCP Client Config (STDIO Mode) ---", err=True)
             typer.echo(json.dumps(config, indent=2), err=True)
             typer.echo("----------------------------------------------------\n", err=True)
 
         elif transport == TransportType.sse:
             config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/sse"}}}
-            typer.echo("\n--- MCP Client Config (SSE 服务器推送模式) ---", err=True)
+            typer.echo("\n--- MCP Client Config (SSE Mode) ---", err=True)
             typer.echo(json.dumps(config, indent=2), err=True)
             typer.echo("----------------------------------------------\n", err=True)
 
         elif transport == TransportType.http:
             config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/mcp"}}}
-            typer.echo("\n--- MCP Client Config (HTTP 流式传输模式) ---", err=True)
+            typer.echo("\n--- MCP Client Config (HTTP Streaming Mode) ---", err=True)
             typer.echo(json.dumps(config, indent=2), err=True)
             typer.echo("---------------------------------------------\n", err=True)
 
@@ -125,14 +125,26 @@ def install_skills(
     manager = SkillManager()
 
     if target_dir is None:
-        # Default to ~/.claude/skills/jmcomic (Standard for Claude Desktop)
-        target_dir = Path.home() / ".claude" / "skills" / "jmcomic"
-        typer.secho(f"[*] 未指定安装路径, 将使用预设路径: {target_dir}", fg=typer.colors.CYAN, err=True)
-        typer.secho("[*] 提示: 您可以使用 'jmai skills install <PATH>' 来安装到特定路径", fg=typer.colors.CYAN, err=True)
+        # Default to ~/.claude/skills (Standard for Claude Desktop)
+        target_dir = Path.home() / ".claude" / "skills"
+        typer.secho(f"[*] Path not specified, using default: {target_dir}", fg=typer.colors.CYAN)
+        typer.secho(f"[*] Hint: Use 'jmai skills install <PATH>' to install to a specific location", fg=typer.colors.CYAN)
     else:
-        typer.echo(f"[*] 安装到指定路径: {target_dir.resolve()}", err=True)
+        target_dir = target_dir.resolve()
+        typer.echo(f"[*] Target parent directory: {target_dir}")
 
-    # 1. Confirmation (unless -y is passed)
+    # 1. Preview
+    preview = manager.get_install_preview(target_dir)
+    typer.secho("\n[ Installation Structure Preview ]", fg=typer.colors.BRIGHT_MAGENTA, bold=True)
+    typer.echo(f"Target Directory: {preview['skill_target_dir']}")
+    typer.echo("File Tree:")
+    
+    # Simple tree visualization
+    for f in preview['files']:
+        typer.echo(f"  - {f}")
+    typer.echo("")
+
+    # 2. Confirmation (unless -y is passed)
     if not yes:
         if not typer.confirm("Proceed with installation?", default=True):
             typer.echo("Installation cancelled.")
@@ -173,22 +185,43 @@ def uninstall_skills(
     manager = SkillManager()
 
     if target_dir is None:
-        # Default to ~/.claude/skills/jmcomic
-        target_dir = Path.home() / ".claude" / "skills" / "jmcomic"
-        typer.secho(f"[*] 未指定卸载路径，将从预设路径卸载: {target_dir}", fg=typer.colors.YELLOW, err=True)
+        # Default to ~/.claude/skills
+        target_dir = Path.home() / ".claude" / "skills"
+        typer.secho(f"[*] Path not specified, uninstalling from default: {target_dir}", fg=typer.colors.YELLOW)
     else:
-        typer.echo(f"[*] 从指定路径卸载: {target_dir.resolve()}", err=True)
+        target_dir = target_dir.resolve()
+        typer.echo(f"[*] Uninstalling from: {target_dir}")
 
     if not target_dir.exists():
         typer.echo(f"Target directory {target_dir} does not exist.")
         return
 
-    if yes or typer.confirm(f"Are you sure you want to delete skills from {target_dir}?", default=True):
-        manager.uninstall(target_dir)
-        typer.echo("Skills uninstalled successfully.")
+    # 1. Preview
+    preview = manager.get_uninstall_preview(target_dir)
+    if not preview['exists']:
+        typer.secho(f"[*] Skipped: No skill directory (jmcomic) found under {target_dir}", fg=typer.colors.YELLOW)
+        return
+
+    typer.secho("\n[ Uninstallation Preview ]", fg=typer.colors.BRIGHT_RED, bold=True)
+    typer.secho(f"THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:", fg=typer.colors.RED)
+    typer.echo(f"Path: {preview['skill_target_dir']}")
+    typer.echo("File Tree:")
+    for f in preview['files']:
+        typer.echo(f"  - {f}")
+    
+    typer.echo("\nOnly the specific skill folder (jmcomic) will be removed. Your other skills remain safe.")
+    typer.echo("")
+
+    # 2. Confirmation
+    if yes or typer.confirm(f"Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?", default=False):
+        if manager.uninstall(target_dir):
+            typer.echo("Skills uninstalled successfully.")
+        else:
+            # This case is usually handled by the 'exists' check above, but as a fallback:
+            typer.secho(f"[*] Skipped: No skill directory found.", fg=typer.colors.YELLOW)
 
 
-# Option 命令组
+# Option group
 option_app = typer.Typer(name="option", help="Manage jmcomic option (configuration)", no_args_is_help=True)
 app.add_typer(option_app, name="option")
 
