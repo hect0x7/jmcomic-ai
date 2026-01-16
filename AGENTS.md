@@ -87,6 +87,17 @@ During local development, you can run the following command to check version syn
 python .github/check_version.py
 ```
 
+### Release Commit Convention
+To ensure the automatic release notes generator (`.github/release.py`) works correctly, use the following format for release commits:
+
+**Format**: `v{version}: {Update Point 1}; {Update Point 2}; ...`
+
+- **Version**: Must match the current version in `pyproject.toml`.
+- **Description**: Use semicolons (`;`) to separate multiple points. These will be automatically converted into a numbered list in the release notes.
+
+**Example**:
+`v0.0.5: Add file tree preview for skills management; Improve uninstallation safety; Refactor SkillManager to remove redundancy`
+
 ---
 
 *Note: This guide is intended for AI-to-AI collaboration. If you are a human developer, please refer to [CONTRIBUTING.md](./.github/CONTRIBUTING.md).*
