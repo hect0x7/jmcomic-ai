@@ -240,11 +240,11 @@ app.add_typer(option_app, name="option")
 @option_app.command("show")
 def option_show():
     """Show current option file path and content"""
-    option_path = resolve_option_path()
-    typer.echo(f"Option file: {option_path}")
+    resolved_path = resolve_option_path()
+    typer.echo(f"Option file: {resolved_path}")
     typer.echo("---")
-    if option_path.exists():
-        typer.echo(option_path.read_text(encoding="utf-8"))
+    if resolved_path.exists():
+        typer.echo(resolved_path.read_text(encoding="utf-8"))
     else:
         typer.echo("Option file does not exist yet.")
 
@@ -262,10 +262,10 @@ def option_edit():
     import platform
     import subprocess
 
-    option_path = resolve_option_path()
-    path = str(option_path)
+    resolved_path = resolve_option_path()
+    path = str(resolved_path)
 
-    if not option_path.exists():
+    if not resolved_path.exists():
         typer.echo(f"Option file does not exist: {path}")
         typer.echo("It will be created when you first use the service (e.g. jmai mcp).")
         return
