@@ -22,49 +22,79 @@ class JmcomicService:
     DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
 
     def __init__(self, option_path: str | None = None):
+        self._setup_logging()
         self.option_path = self._resolve_option_path(option_path)
         self.option = self._load_option()
         self.client = self.option.build_jm_client()
-        self._setup_logging()
         self._ensure_init()
 
     def _resolve_option_path(self, cli_path: str | None) -> Path:
+        """
+        [not a tool]
+        """
+        self.logger.info("Resolving jmcomic option path (Priority: CLI > Env > Default)...")
+
         # 1. CLI Argument
         if cli_path:
-            return Path(cli_path).resolve()
+            path = Path(cli_path).resolve()
+            self.logger.info(f"Found via [CLI argument] -> {path}")
+            return path
+        self.logger.info("CLI argument not provided.")
 
         # 2. Environment Variable
         env_path = os.getenv(self.ENV_OPTION_PATH)
         if env_path:
-            return Path(env_path).resolve()
+            path = Path(env_path).resolve()
+            self.logger.info(f"Found via [Environment variable: {self.ENV_OPTION_PATH}] -> {path}")
+            return path
+        self.logger.info(f"Environment variable {self.ENV_OPTION_PATH} not set.")
 
         # 3. Default Path
+        self.logger.info(f"Using [Default path] -> {self.DEFAULT_OPTION_PATH}")
         return self.DEFAULT_OPTION_PATH
 
     def _load_option(self) -> JmOption:
+        self.logger.info(f"Loading jmcomic option from: {self.option_path}")
         if not self.option_path.exists():
+            self.logger.warning(f"Option file NOT found. Generating default at: {self.option_path}")
             # Generate default if not exists
             self.option_path.parent.mkdir(parents=True, exist_ok=True)
             default_option = JmModuleConfig.option_class().default()
             default_option.to_file(str(self.option_path))
+            self.logger.info("Default option generated and loaded.")
             return default_option
 
-        return create_option_by_file(str(self.option_path))
+        option = create_option_by_file(str(self.option_path))
+        self.logger.info("Option loaded successfully.")
+        return option
 
     def _ensure_init(self):
         """Ensure necessary initialization"""
         pass
 
     def _setup_logging(self):
-        """Setup logging to file in current working directory"""
+        """Setup logging to both file and console"""
         log_file = Path.cwd() / "jmcomic_ai.log"
-        print(f"[*] Logging to file: {log_file}")
-
+        
+        # Configure root logger to output to file
         logging.basicConfig(
-            filename=str(log_file), level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.FileHandler(str(log_file), encoding='utf-8')
+            ]
         )
+        
         self.logger = logging.getLogger("jmcomic_ai")
-        self.logger.info(f"Logging initialized. Log file: {log_file}")
+        
+        # Add a StreamHandler for console output with a cleaner format
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_formatter = logging.Formatter("[*] %(message)s")
+        console_handler.setFormatter(console_formatter)
+        self.logger.addHandler(console_handler)
+        
+        self.logger.info(f"Logging to file: {log_file}")
 
     def reload_option(self):
         """
@@ -123,14 +153,14 @@ class JmcomicService:
 
     # --- Data Conversion Helper Methods ---
 
-    def _parse_search_page(self, page: JmPageContent) -> list[dict[str, Any]]:
-        """Parse JmSearchPage/JmCategoryPage content to dictionary list"""
-        results = []
+    def _parse_search_page(self, page: JmPageContent) -> dict[str, Any]:
+        """Parse JmSearchPage/JmCategoryPage content to dictionary"""
+        albums = []
 
         # 使用 jmcomic 提供的迭代器获取 id, title, tags
         for album_id, title, tags in page.iter_id_title_tag():
             album_id = str(album_id)
-            results.append(
+            albums.append(
                 {
                     "id": album_id,
                     "title": str(title),
@@ -138,7 +168,11 @@ class JmcomicService:
                     "cover_url": JmcomicText.get_album_cover_url(album_id),
                 }
             )
-        return results
+
+        return {
+            "albums": albums,
+            "total_count": int(page.total) if hasattr(page, "total") else len(albums),
+        }
 
     def _parse_album_detail(self, album: JmAlbumDetail) -> dict[str, Any]:
         """Convert JmAlbumDetail object to dictionary"""
@@ -181,7 +215,9 @@ class JmcomicService:
             category: Category filter - "all" or specific category CID (default: "all")
 
         Returns:
-            List of album dictionaries, each containing: id, title, tags, cover_url.
+            Dictionary containing:
+                - albums: List of album dictionaries
+                - total_count: Total number of results
         """
         client = self.get_client()
 
@@ -208,7 +244,9 @@ class JmcomicService:
             page: Page number, starting from 1 (default: 1)
 
         Returns:
-            List of ranked album dictionaries: id, title, tags, cover_url.
+            Dictionary containing:
+                - albums: List of ranked album dictionaries
+                - total_count: Total number of results
         """
         client = self.get_client()
         search_page: JmCategoryPage
@@ -219,7 +257,7 @@ class JmcomicService:
         elif period == "month":
             search_page = client.month_ranking(page)
         else:
-            return []
+            return {"albums": [], "total_count": 0}
 
         return self._parse_search_page(search_page)
 
@@ -337,7 +375,9 @@ class JmcomicService:
                 (default: "mr")
 
         Returns:
-            List of album dictionaries matching the category and sort criteria.
+            Dictionary containing:
+                - albums: List of album dictionaries matching the criteria
+                - total_count: Total number of results
         """
         client = self.get_client()
 

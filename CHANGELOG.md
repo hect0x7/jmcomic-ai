@@ -9,6 +9,15 @@ todo
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.0.4] - 2026-01-16
+
+### Added
+- 🔥 新增 MCP 服务器热重载（Hot-reload）功能，通过 `jmai mcp --reload` 启动，代码改动后服务器自动重启，大幅提升开发与调试效率。
+- 📊 搜索相关工具（`search_album`, `get_ranking`, `get_category_list`）的返回结构中新增 `total_count` 字段，方便 AI 掌握搜索结果全貌。
+
+### Fixed
+- 🐛 修复 `--reload` 模式下主进程与子进程重复初始化并重复打印配置提示的问题，输出更清爽。
+
 ## [0.0.3] - 2026-01-15
 
 ### Added

@@ -145,7 +145,9 @@ jmai mcp --help
 ### 调试建议
 
 1. **查阅参考源码**：如前文所述，善用 `reference/` 目录。
-2. **实时日志**：启动 MCP 服务时，控制台会打印日志路径。默认日志文件通常为项目根目录下的 `jmcomic_ai.log`。使用 `tail -f` 观察可以极大提高开发效率。
+2. **实时日志与热重载**：
+    - 使用 `tail -f` 观察项目根目录下的 `jmcomic_ai.log` 日志。
+    - **热重载调试**：使用 `jmai mcp --reload` 启动服务。在该模式下，你对 `src/` 目录下代码的任何修改都会触发服务器自动重启，无需反复手动开关服务。
 3. **本地 AI 智能体/编辑器调试**：在你的客户端（如 Cursor, Antigravity, Windsurf, VS Code, Claude Desktop 等）中添加本地开发配置。
    以 Claude Desktop 为例，在 `claude_desktop_config.json` 中配置：
    ```json

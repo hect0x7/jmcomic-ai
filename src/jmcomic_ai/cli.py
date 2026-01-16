@@ -51,6 +51,7 @@ def mcp(
     option: Path | None = typer.Option(None, "--option", help="Path to jmcomic option file"),
     port: int = typer.Option(8000, help="Port for server (ignored for stdio)"),
     host: str = typer.Option("127.0.0.1", help="Host for server (ignored for stdio)"),
+    reload: bool = typer.Option(False, "--reload", help="Auto-reload server on file changes"),
 ):
     """
     Start the MCP Server.
@@ -66,37 +67,42 @@ def mcp(
     # Defer import to avoid circular dependency or early loading
     from jmcomic_ai.mcp.server import run_server
 
-    # Initialize service to check/ensure option availability
-    # We pass str(option) because JmcomicService expects str or None
-    service = JmcomicService(str(option) if option else None)
-
     transport_value: str = transport.value
-    typer.echo(f"Starting MCP Server ({transport_value}) using option: {service.option_path}", err=True)
 
-    # Print configuration hint
-    import json
+    if reload:
+        from jmcomic_ai.mcp.reloader import run_with_reloader
 
-    typer.echo("\n💡 以下配置可直接复制到您的 MCP 客户端配置文件中 (Cursor/Windsurf/Claude Desktop 等)", err=True)
+        src_path = Path(__file__).parent.parent
+        run_with_reloader(None, src_path)
+    else:
+        # Initialize service only when actually running the server (not the monitor process)
+        service = JmcomicService(str(option) if option else None)
+        typer.echo(f"Starting MCP Server ({transport_value}) using option: {service.option_path}", err=True)
 
-    if transport == TransportType.stdio:
-        config = {"mcpServers": {"jmcomic-ai": {"command": "jmai", "args": ["mcp", "stdio"]}}}
-        typer.echo("\n--- MCP Client Config (stdio 标准输入输出模式) ---", err=True)
-        typer.echo(json.dumps(config, indent=2), err=True)
-        typer.echo("----------------------------------------------------\n", err=True)
+        # Print configuration hint
+        import json
 
-    elif transport == TransportType.sse:
-        config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/sse"}}}
-        typer.echo("\n--- MCP Client Config (SSE 服务器推送模式) ---", err=True)
-        typer.echo(json.dumps(config, indent=2), err=True)
-        typer.echo("----------------------------------------------\n", err=True)
+        typer.echo("\n💡 以下配置可直接复制到您的 MCP 客户端配置文件中 (Cursor/Windsurf/Claude Desktop 等)", err=True)
 
-    elif transport == TransportType.http:
-        config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/mcp"}}}
-        typer.echo("\n--- MCP Client Config (HTTP 流式传输模式) ---", err=True)
-        typer.echo(json.dumps(config, indent=2), err=True)
-        typer.echo("---------------------------------------------\n", err=True)
+        if transport == TransportType.stdio:
+            config = {"mcpServers": {"jmcomic-ai": {"command": "jmai", "args": ["mcp", "stdio"]}}}
+            typer.echo("\n--- MCP Client Config (stdio 标准输入输出模式) ---", err=True)
+            typer.echo(json.dumps(config, indent=2), err=True)
+            typer.echo("----------------------------------------------------\n", err=True)
 
-    run_server(transport_value, service, host=host, port=port)
+        elif transport == TransportType.sse:
+            config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/sse"}}}
+            typer.echo("\n--- MCP Client Config (SSE 服务器推送模式) ---", err=True)
+            typer.echo(json.dumps(config, indent=2), err=True)
+            typer.echo("----------------------------------------------\n", err=True)
+
+        elif transport == TransportType.http:
+            config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/mcp"}}}
+            typer.echo("\n--- MCP Client Config (HTTP 流式传输模式) ---", err=True)
+            typer.echo(json.dumps(config, indent=2), err=True)
+            typer.echo("---------------------------------------------\n", err=True)
+
+        run_server(transport_value, service, host=host, port=port)
 
 
 skills_app = typer.Typer(name="skills", help="Manage generic skills resources", no_args_is_help=True)

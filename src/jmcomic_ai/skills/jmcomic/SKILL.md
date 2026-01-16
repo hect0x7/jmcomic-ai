@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.3"
+  version: "0.0.4"
   dependencies: python>=3.10
 ---
 

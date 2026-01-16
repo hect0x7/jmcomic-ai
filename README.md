@@ -124,6 +124,7 @@ JMComic AI 提供了两个维度的能力，你可以根据需求，选择以下
 在终端运行以下命令开启服务：
 ```bash
 jmai mcp          # 默认开启 SSE 服务，端口 8000
+jmai mcp --reload # 开启热重载模式（推荐开发/调试使用）
 ```
 
 #### 2. 在客户端中配置
@@ -194,6 +195,7 @@ jmai mcp          # 默认开启 SSE 服务，端口 8000
 *   **MCP 服务管理**:
     ```bash
     jmai mcp              # 启动 SSE 服务 (推荐方式，默认端口 8000)
+    jmai mcp --reload     # 启动带热重载的服务 (修改代码后自动重启)
     jmai mcp http         # 启动 Streamable HTTP 服务 (专家推荐，支持生产部署)
     jmai mcp stdio        # 启动 stdio 服务 (传统的子进程/管道模式)
     ```
