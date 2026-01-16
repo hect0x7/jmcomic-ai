@@ -252,8 +252,8 @@ def option_show():
 @option_app.command("path")
 def option_path():
     """Print option file path"""
-    option_path = resolve_option_path()
-    typer.echo(option_path)
+    resolved_path = resolve_option_path()
+    typer.echo(resolved_path)
 
 
 @option_app.command("edit")
