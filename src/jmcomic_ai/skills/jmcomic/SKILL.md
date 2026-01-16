@@ -24,6 +24,9 @@ Activate this skill when the user wants to:
  
 This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
  
+Hot reload (MCP server):
+- Use `--reload` when starting the MCP server to enable filesystem-based hot reloading during development.
+
 ### Data Structure Notes
 
 Most search and browsing tools (e.g., `search_album`, `get_ranking`, `get_category_list`) return a consistent structure that supports pagination:

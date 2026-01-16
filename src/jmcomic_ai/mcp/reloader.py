@@ -59,7 +59,7 @@ def run_with_reloader(watch_path: Path) -> None:
         while True:
             time.sleep(1)
             if process and process.poll() is not None:
-                # 如果子进程意外退出（非代码变更引起），我们也尝试重启
+                # 如果子进程意外退出(非代码变更引起), 我们也尝试重启
                 print("[!] Server process exited. Restarting in 2 seconds...", file=sys.stderr)
                 time.sleep(2)
                 start_process()
