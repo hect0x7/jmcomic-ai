@@ -1,10 +1,12 @@
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 import typer
-from typing import Optional
+
 from jmcomic_ai import __version__
-from jmcomic_ai.core import JmcomicService
+from jmcomic_ai.core import JmcomicService, resolve_option_path
+
 
 def version_callback(value: bool):
     if value:
@@ -22,14 +24,14 @@ app = typer.Typer(
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-v",
-        help="Show the version and exit.",
-        callback=version_callback,
-        is_eager=True,
-    ),
+        version: Optional[bool] = typer.Option(
+            None,
+            "--version",
+            "-v",
+            help="Show the version and exit.",
+            callback=version_callback,
+            is_eager=True,
+        ),
 ):
     """
     JMComic AI Agent Interface
@@ -45,13 +47,13 @@ class TransportType(str, Enum):
 
 @app.command()
 def mcp(
-    transport: TransportType = typer.Argument(
-        TransportType.sse, help="Transport mode: 'sse' (default), 'stdio', or 'http'"
-    ),
-    option: Path | None = typer.Option(None, "--option", help="Path to jmcomic option file"),
-    port: int = typer.Option(8000, help="Port for server (ignored for stdio)"),
-    host: str = typer.Option("127.0.0.1", help="Host for server (ignored for stdio)"),
-    reload: bool = typer.Option(False, "--reload", help="Auto-reload server on file changes"),
+        transport: TransportType = typer.Argument(
+            TransportType.sse, help="Transport mode: 'sse' (default), 'stdio', or 'http'"
+        ),
+        option: Path | None = typer.Option(None, "--option", help="Path to jmcomic option file"),
+        port: int = typer.Option(8000, help="Port for server (ignored for stdio)"),
+        host: str = typer.Option("127.0.0.1", help="Host for server (ignored for stdio)"),
+        reload: bool = typer.Option(False, "--reload", help="Auto-reload server on file changes"),
 ):
     """
     Start the MCP Server.
@@ -82,7 +84,10 @@ def mcp(
         # Print configuration hint
         import json
 
-        typer.echo("\n💡 Copy and paste the following configuration into your MCP client config (Cursor, Windsurf, Claude Desktop, etc.)", err=True)
+        typer.echo(
+            "\n💡 Copy and paste the following configuration into your MCP client config (Cursor, Windsurf, Claude Desktop, "
+            "etc.)",
+            err=True)
 
         if transport == TransportType.stdio:
             config = {"mcpServers": {"jmcomic-ai": {"command": "jmai", "args": ["mcp", "stdio"]}}}
@@ -111,11 +116,11 @@ app.add_typer(skills_app, name="skills")
 
 @skills_app.command("install")
 def install_skills(
-    target_dir: Path | None = typer.Argument(
-        None, help="Directory to install skills into. Defaults to ~/.claude/skills/jmcomic"
-    ),
-    force: bool = typer.Option(False, "--force", "-f", help="Force overwrite existing files"),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+        target_dir: Path | None = typer.Argument(
+            None, help="Directory to install skills into. Defaults to ~/.claude/skills/jmcomic"
+        ),
+        force: bool = typer.Option(False, "--force", "-f", help="Force overwrite existing files"),
+        yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """
     Install built-in skill definitions (SKILL.md, etc.) to a directory.
@@ -138,7 +143,7 @@ def install_skills(
     typer.secho("\n[ Installation Structure Preview ]", fg=typer.colors.BRIGHT_MAGENTA, bold=True)
     typer.echo(f"Target Directory: {preview['skill_target_dir']}")
     typer.echo("File Tree:")
-    
+
     # Simple tree visualization
     for f in preview['files']:
         typer.echo(f"  - {f}")
@@ -172,10 +177,10 @@ def install_skills(
 
 @skills_app.command("uninstall")
 def uninstall_skills(
-    target_dir: Path | None = typer.Argument(
-        None, help="Directory to uninstall skills from. Defaults to ~/.claude/skills/jmcomic"
-    ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+        target_dir: Path | None = typer.Argument(
+            None, help="Directory to uninstall skills from. Defaults to ~/.claude/skills/jmcomic"
+        ),
+        yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """
     Uninstall skills from the directory.
@@ -208,7 +213,7 @@ def uninstall_skills(
     typer.echo("File Tree:")
     for f in preview['files']:
         typer.echo(f"  - {f}")
-    
+
     typer.echo("\nOnly the specific skill folder (jmcomic) will be removed. Your other skills remain safe.")
     typer.echo("")
 
@@ -229,11 +234,11 @@ app.add_typer(option_app, name="option")
 @option_app.command("show")
 def option_show():
     """Show current option file path and content"""
-    service = JmcomicService()
-    typer.echo(f"Option file: {service.option_path}")
+    option_path = resolve_option_path()
+    typer.echo(f"Option file: {option_path}")
     typer.echo("---")
-    if service.option_path.exists():
-        typer.echo(service.option_path.read_text(encoding="utf-8"))
+    if option_path.exists():
+        typer.echo(option_path.read_text(encoding="utf-8"))
     else:
         typer.echo("Option file does not exist yet.")
 
@@ -241,8 +246,8 @@ def option_show():
 @option_app.command("path")
 def option_path():
     """Print option file path"""
-    service = JmcomicService()
-    typer.echo(service.option_path)
+    option_path = resolve_option_path()
+    typer.echo(option_path)
 
 
 @option_app.command("edit")
@@ -251,12 +256,12 @@ def option_edit():
     import platform
     import subprocess
 
-    service = JmcomicService()
-    path = str(service.option_path)
+    option_path = resolve_option_path()
+    path = str(option_path)
 
-    if not service.option_path.exists():
+    if not option_path.exists():
         typer.echo(f"Option file does not exist: {path}")
-        typer.echo("It will be created when you first use the service.")
+        typer.echo("It will be created when you first use the service (e.g. jmai mcp).")
         return
 
     try:

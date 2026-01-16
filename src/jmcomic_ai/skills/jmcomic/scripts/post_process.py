@@ -1,8 +1,4 @@
 import argparse
-import sys
-from pathlib import Path
-
-
 
 from jmcomic_ai.core import JmcomicService
 

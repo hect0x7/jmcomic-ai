@@ -18,41 +18,43 @@ from jmcomic import (
 )
 
 
-class JmcomicService:
-    ENV_OPTION_PATH = "JM_OPTION_PATH"
-    DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
 
+ENV_OPTION_PATH = "JM_OPTION_PATH"
+DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
+
+
+def resolve_option_path(cli_path: str | None = None, logger: logging.Logger | None = None) -> Path:
+    """
+    Resolve jmcomic option path (Priority: CLI > Env > Default)
+    """
+    if logger is None:
+        logger = logging.getLogger("jmcomic_ai")
+
+    # 1. CLI Argument
+    if cli_path:
+        path = Path(cli_path).resolve()
+        logger.info(f"Found via [CLI argument] -> {path}")
+        return path
+    
+    # 2. Environment Variable
+    env_path = os.getenv(ENV_OPTION_PATH)
+    if env_path:
+        path = Path(env_path).resolve()
+        logger.info(f"Found via [Environment variable: {ENV_OPTION_PATH}] -> {path}")
+        return path
+
+    # 3. Default Path
+    logger.info(f"Using [Default path] -> {DEFAULT_OPTION_PATH}")
+    return DEFAULT_OPTION_PATH
+
+
+class JmcomicService:
     def __init__(self, option_path: str | None = None):
         self._setup_logging()
-        self.option_path = self._resolve_option_path(option_path)
+        self.option_path = resolve_option_path(option_path, self.logger)
         self.option = self._load_option()
         self.client = self.option.build_jm_client()
         self._ensure_init()
-
-    def _resolve_option_path(self, cli_path: str | None) -> Path:
-        """
-        [not a tool]
-        """
-        self.logger.info("Resolving jmcomic option path (Priority: CLI > Env > Default)...")
-
-        # 1. CLI Argument
-        if cli_path:
-            path = Path(cli_path).resolve()
-            self.logger.info(f"Found via [CLI argument] -> {path}")
-            return path
-        self.logger.info("CLI argument not provided.")
-
-        # 2. Environment Variable
-        env_path = os.getenv(self.ENV_OPTION_PATH)
-        if env_path:
-            path = Path(env_path).resolve()
-            self.logger.info(f"Found via [Environment variable: {self.ENV_OPTION_PATH}] -> {path}")
-            return path
-        self.logger.info(f"Environment variable {self.ENV_OPTION_PATH} not set.")
-
-        # 3. Default Path
-        self.logger.info(f"Using [Default path] -> {self.DEFAULT_OPTION_PATH}")
-        return self.DEFAULT_OPTION_PATH
 
     def _load_option(self) -> JmOption:
         self.logger.info(f"Loading jmcomic option from: {self.option_path}")
@@ -64,6 +66,7 @@ class JmcomicService:
             default_option.to_file(str(self.option_path))
             self.logger.info("Default option generated and loaded.")
             return default_option
+
 
         option = create_option_by_file(str(self.option_path))
         self.logger.info("Option loaded successfully.")
