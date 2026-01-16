@@ -3,31 +3,32 @@ import sys
 import subprocess
 import time
 from pathlib import Path
+from typing import Callable
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
 class RestartHandler(FileSystemEventHandler):
-    def __init__(self, restart_callback):
+    def __init__(self, restart_callback: Callable[[], None]) -> None:
         self.restart_callback = restart_callback
-        self.last_restart = 0
+        self.last_restart: float = 0
 
-    def on_modified(self, event):
+    def on_modified(self, event: FileSystemEvent) -> None:
         if event.src_path.endswith(".py"):
             now = time.time()
-            if now - self.last_restart > 1:  # 节流：1秒内只重启一次
+            if now - self.last_restart > 1:  # 节流: 1秒内只重启一次
                 print(f"\n[*] Detected change in {event.src_path}, restarting server...", file=sys.stderr)
                 self.restart_callback()
                 self.last_restart = now
 
-def run_with_reloader(main_func, watch_path: Path):
+def run_with_reloader(watch_path: Path) -> None:
     """
     运行带有热重载功能的服务器。
-    由于 FastMCP 运行在 asyncio 中且通常会阻塞主线程，
-    最简单的 reload 实现是主进程作为监控，子进程运行服务器。
+    由于 FastMCP 运行在 asyncio 中且通常会阻塞主线程,
+    最简单的 reload 实现是主进程作为监控, 子进程运行服务器。
     """
     process = None
 
-    def start_process():
+    def start_process() -> None:
         nonlocal process
         if process:
             process.terminate()
@@ -36,7 +37,7 @@ def run_with_reloader(main_func, watch_path: Path):
             except subprocess.TimeoutExpired:
                 process.kill()
         
-        # 构造重启动命令：剔除 --reload 后的当前命令
+        # 构造重启动命令: 剔除 --reload 后的当前命令
         args = [sys.executable, "-m", "jmcomic_ai.cli"]
         # 获取除了 --reload 之外的所有参数
         original_args = sys.argv[1:]

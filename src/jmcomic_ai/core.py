@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -88,11 +89,18 @@ class JmcomicService:
         self.logger = logging.getLogger("jmcomic_ai")
         
         # Add a StreamHandler for console output with a cleaner format
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter("[*] %(message)s")
-        console_handler.setFormatter(console_formatter)
-        self.logger.addHandler(console_handler)
+        # Check if a StreamHandler already exists to avoid duplicate handlers
+        has_console_handler = any(
+            isinstance(handler, logging.StreamHandler) and handler.stream == sys.stderr
+            for handler in self.logger.handlers
+        )
+        
+        if not has_console_handler:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            console_formatter = logging.Formatter("[*] %(message)s")
+            console_handler.setFormatter(console_formatter)
+            self.logger.addHandler(console_handler)
         
         self.logger.info(f"Logging to file: {log_file}")
 

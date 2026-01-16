@@ -73,7 +73,7 @@ def mcp(
         from jmcomic_ai.mcp.reloader import run_with_reloader
 
         src_path = Path(__file__).parent.parent
-        run_with_reloader(None, src_path)
+        run_with_reloader(src_path)
     else:
         # Initialize service only when actually running the server (not the monitor process)
         service = JmcomicService(str(option) if option else None)
