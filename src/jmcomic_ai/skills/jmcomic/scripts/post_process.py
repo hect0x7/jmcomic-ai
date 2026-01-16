@@ -2,10 +2,10 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add src to path (traverse up 4 levels from scripts/post_process.py to reach src/)
-sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+
 
 from jmcomic_ai.core import JmcomicService
+
 
 def main():
     parser = argparse.ArgumentParser(description="Post-process downloaded JMComic albums (Zip, PDF, LongImg)")
@@ -19,13 +19,15 @@ def main():
     args = parser.parse_args()
 
     service = JmcomicService(args.option)
-    
+
     params = {}
     if args.delete:
         params["delete_original_file"] = True
     if args.password:
+        if args.type == "long_img":
+            parser.error("--password is only supported for zip or img2pdf")
         params["encrypt"] = {"password": args.password}
-    
+
     # Map outdir to correct plugin parameter
     if args.outdir:
         if args.type == "zip":
@@ -37,6 +39,7 @@ def main():
 
     result = service.post_process(args.id, args.type, params)
     print(result)
+
 
 if __name__ == "__main__":
     main()
