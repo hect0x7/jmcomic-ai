@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.5"
+  version: "0.0.6"
   dependencies: python>=3.10
 ---
 
@@ -16,22 +16,25 @@ This skill enables you to interact with JMComic (18comic), a popular manga platf
 Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
-- Download entire albums or specific chapters (**Now returns the predicted download path**)
+- Download entire albums or specific chapters (**Returns status and download path**) - *Progress reported via server logs*
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
-- **NEW**: Post-process downloaded content (Zip, PDF, LongImage)
+- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **custom output paths**
 
 ## Core Capabilities
 
 ### 🛠️ Post-Processing (New in 0.0.6)
 
-This skill now supports advanced post-processing of downloaded manga. These tools allow you to transform discrete image files into more user-friendly formats:
+This skill supports advanced post-processing of downloaded manga. It returns structured data including the **output path** of the generated file.
 
-- **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file. Supports **AES Encryption** for security.
-- **📄 PDF Conversion**: Merge all images of an album into a single, high-quality PDF document. Perfect for mobile reading.
-- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image (vertical scroll mode).
+- **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file.
+- **📄 PDF Conversion**: Merge all images of an album into a single PDF document.
+- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image.
 
-**Workflow Suggestion**: Use `download_album` first to ensure images are on disk, then call `post_process` to package them as needed.
+**Custom Output Paths**: You can now specify a `dir_rule` in the parameters to control where the output file is saved.
+Example `params` for `post_process`: `{"dir_rule": {"base_dir": "/custom/path"}}`
+
+**Workflow Suggestion**: Use `download_album` first, then call `post_process`. Check the returned dictionary for the `output_path`.
  
 This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
  

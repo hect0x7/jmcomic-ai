@@ -29,35 +29,36 @@
                     "description": "Client implementation type. 'html' for web client (IP restricted but efficient), 'api' for APP client (no IP restriction, better compatibility)"
                 },
                 "domain": {
-                    "type": "object",
-                    "description": "Domain configuration for different client implementations",
-                    "properties": {
-                        "html": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "html": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "api": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
                             },
-                            "description": "List of domains for HTML client",
-                            "examples": [
-                                [
-                                    "18comic.vip",
-                                    "18comic.org"
-                                ]
-                            ]
+                            "additionalProperties": false
                         },
-                        "api": {
+                        {
                             "type": "array",
                             "items": {
                                 "type": "string"
-                            },
-                            "description": "List of domains for API client",
-                            "examples": [
-                                [
-                                    "www.jmapiproxyxxx.vip"
-                                ]
-                            ]
+                            }
+                        },
+                        {
+                            "type": "string"
                         }
-                    }
+                    ],
+                    "default": []
                 },
                 "retry_times": {
                     "type": "integer",
@@ -121,7 +122,8 @@
                         }
                     }
                 }
-            }
+            },
+            "additionalProperties": false
         },
         "download": {
             "type": "object",
@@ -173,7 +175,8 @@
                         }
                     }
                 }
-            }
+            },
+            "additionalProperties": false
         },
         "dir_rule": {
             "type": "object",
@@ -210,7 +213,8 @@
                     "default": null,
                     "description": "Chinese character normalization. 'zh-cn' for simplified, 'zh-tw' for traditional, null for no conversion. Requires 'zhconv' library"
                 }
-            }
+            },
+            "additionalProperties": false
         },
         "plugins": {
             "type": "object",

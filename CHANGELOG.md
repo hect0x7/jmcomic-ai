@@ -5,6 +5,20 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.0.6] - 2026-01-17
+
+### Changed
+- 🔄 **工具输出结构化**：`download_album` 与 `post_process` 现在返回结构化的字典（包含 `status`, `download_path` 等字段）而非纯文本，以提升 AI 代理的自动化处理与验证能力。
+
+### Added
+- 📈 **实时进度追踪**：`download_album` 现已支持发送 MCP 进度通知，允许客户端实时显示下载进度。
+- 🧪 **集成测试增强**：新增 `test_tool_download_album_with_progress` 测试用例，验证进度捕获与结构化返回值的正确性。
+- 📄 **文档完善**：更新 `SKILL.md`，明确了后处理插件（Zip/PDF/LongImg）的功能描述及 `dir_rule` 自定义路径参数的用法。
+- 📘 **开发规范**：在 `AGENTS.md` 中强制要求每次代码修改后必须同步更新 `CHANGELOG.md`，确保变更记录不遗漏。
+
+
+---
+
 ## [0.0.5] - 2026-01-16
 
 ### Added
