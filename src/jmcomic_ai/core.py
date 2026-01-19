@@ -307,6 +307,23 @@ class JmcomicService:
 
         return self._parse_search_page(search_page)
 
+    def _safe_ctx_call(self, ctx, loop, coro_func, error_msg_prefix: str):
+        """
+        安全地调用 MCP Context 异步方法，防止进度报告失败中止下载
+        
+        Args:
+            ctx: MCP Context 对象
+            loop: asyncio 事件循环
+            coro_func: 返回协程的函数（如 lambda: ctx.info(msg)）
+            error_msg_prefix: 错误日志前缀
+        """
+        if ctx:
+            try:
+                import asyncio
+                asyncio.run_coroutine_threadsafe(coro_func(), loop)
+            except Exception as e:
+                self.logger.warning(f"{error_msg_prefix}: {e}")
+
     async def download_album(self, album_id: str, ctx: Context = None) -> dict[str, Any]:
         """
         Download an entire album/comic in the background.
@@ -359,15 +376,13 @@ class JmcomicService:
                 }
                 msg = f"📚 Album Info: {json.dumps(album_dict, ensure_ascii=False)}"
                 service_logger.info(msg)
-                if ctx:
-                    asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send album info to ctx")
 
             def after_album(self, album: JmAlbumDetail):
                 super().after_album(album)
                 msg = f"✅ Album download completed: {album.name}"
                 service_logger.info(msg)
-                if ctx:
-                    asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send album completion to ctx")
 
             def before_photo(self, photo: JmPhotoDetail):
                 super().before_photo(photo)
@@ -379,8 +394,7 @@ class JmcomicService:
 
                 msg = f"📖 Starting chapter: {photo.photo_id} - {photo.name} ({len(photo)} pages)"
                 service_logger.info(msg)
-                if ctx:
-                    asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send chapter start to ctx")
 
             def after_image(self, image: JmImageDetail, img_save_path: str):
                 super().after_image(image, img_save_path)
@@ -398,8 +412,7 @@ class JmcomicService:
                 if total > 0:
                     msg = f"Chapter {photo_id}: {current}/{total}"
                     service_logger.info(msg)
-                    if ctx:
-                        asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                    service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send image progress to ctx")
 
         # 3. Blocking Download Function
         def _blocking_download():
@@ -472,15 +485,13 @@ class JmcomicService:
                 }
                 msg = f"📖 Photo Info: {json.dumps(photo_dict, ensure_ascii=False)}"
                 service_logger.info(msg)
-                if ctx:
-                    asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send photo info to ctx")
 
             def after_photo(self, photo: JmPhotoDetail):
                 super().after_photo(photo)
                 msg = f"✅ Photo download completed: {photo.name} ({self.current} images)"
                 service_logger.info(msg)
-                if ctx:
-                    asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send photo completion to ctx")
 
             def after_image(self, image: JmImageDetail, img_save_path: str):
                 super().after_image(image, img_save_path)
@@ -494,9 +505,13 @@ class JmcomicService:
 
                 service_logger.info(msg)
                 if ctx:
-                    asyncio.run_coroutine_threadsafe(ctx.info(msg), loop)
+                    service._safe_ctx_call(ctx, loop, lambda: ctx.info(msg), "Failed to send download progress to ctx")
                     if hasattr(ctx, 'report_progress') and self.total > 0:
-                        asyncio.run_coroutine_threadsafe(ctx.report_progress(self.current, self.total), loop)
+                        service._safe_ctx_call(
+                            ctx, loop,
+                            lambda: ctx.report_progress(self.current, self.total),
+                            "Failed to report progress to ctx"
+                        )
 
         # Blocking Download Function
         def _blocking_download():
@@ -800,7 +815,7 @@ class JmcomicService:
             }
 
         except Exception as e:
-            self.logger.error(f"Post-process failed: {str(e)}")
+            self.logger.exception(f"Post-process failed: {e}")
             return {
                 "status": "error",
                 "album_id": album_id,
