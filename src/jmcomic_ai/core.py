@@ -678,27 +678,34 @@ class JmcomicService:
             total_images = 0
 
             for photo in album:
-                photo_dir = self.option.decide_image_save_dir(photo)
-                if not os.path.exists(photo_dir):
+                photo_dir = Path(self.option.decide_image_save_dir(photo))
+                if not photo_dir.exists():
                     continue
 
                 images = []
-                for file in sorted(os.listdir(photo_dir)):
-                    if file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.gif')) and not file.startswith('.'):
-                        images.append((os.path.join(photo_dir, file), None))
+                for file in sorted(photo_dir.iterdir()):
+                    if (
+                        file.suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp', '.gif')
+                        and not file.name.startswith('.')
+                    ):
+                        images.append((str(file), None))
 
                 if images:
                     photo_dict[photo] = images
                     total_images += len(images)
 
             if not photo_dict:
+                expected_path = self.option.dir_rule.decide_album_root_dir(album)
+                self.logger.error(
+                    f"No downloaded images found for album {album_id}. "
+                    f"Expected path: {expected_path}"
+                )
                 return {
                     "status": "error",
                     "album_id": album_id,
                     "process_type": process_type,
                     "output_path": "",
-                    "message": f"Error: No downloaded images found for album {album_id}. Expected path: "
-                               f"{self.option.dir_rule.decide_album_root_dir(album)}"
+                    "message": f"Error: No downloaded images found for album {album_id}. Expected path: {expected_path}"
                 }
 
             mock_downloader.download_success_dict[album] = photo_dict
@@ -707,6 +714,10 @@ class JmcomicService:
             # 3. Safe Plugin Invocaton (No pollution to self.option)
             pclass = JmModuleConfig.REGISTRY_PLUGIN.get(process_type)
             if pclass is None:
+                self.logger.error(
+                    f"Plugin '{process_type}' not found. "
+                    f"Available plugins: {list(JmModuleConfig.REGISTRY_PLUGIN.keys())}"
+                )
                 return {
                     "status": "error",
                     "album_id": album_id,
