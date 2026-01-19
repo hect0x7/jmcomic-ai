@@ -749,16 +749,24 @@ class JmcomicService:
                     # For photo level, it creates multiple files in the zip_dir
                     # We return the directory path
                     if dir_rule_dict:
-                        # Hacky: reuse decide_filepath to resolve base_dir logic
-                        # But decide_filepath returns a FILE path.
-                        # Generally zip_dir is respected if dir_rule_dict is NOT present or handles it.
-                        # If dir_rule_dict is present, base_dir logic is complex.
-                        # For now let's try to resolve zip_dir relative to cwd if needed
-                        pass
-
-                    # Simple resolution for now
-                    output_path = os.path.abspath(zip_dir)
-                    is_directory = True
+                        # Use decide_filepath to resolve the correct directory
+                        # Get the first photo to determine the output directory
+                        first_photo = next(iter(photo_dict.keys()), None)
+                        if first_photo:
+                            # decide_filepath returns a file path, extract its directory
+                            sample_path = plugin.decide_filepath(
+                                album, first_photo, filename_rule, suffix, zip_dir, dir_rule_dict
+                            )
+                            output_path = os.path.dirname(sample_path)
+                            is_directory = True
+                        else:
+                            # Fallback if no photos found
+                            output_path = os.path.abspath(zip_dir)
+                            is_directory = True
+                    else:
+                        # Simple resolution when dir_rule_dict is not provided
+                        output_path = os.path.abspath(zip_dir)
+                        is_directory = True
 
             elif process_type == 'img2pdf':
                 # Img2pdfPlugin defaults: pdf_dir=None, filename_rule='Pid', suffix='pdf'
