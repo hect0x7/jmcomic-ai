@@ -408,10 +408,11 @@ class JmcomicService:
                 # Pass the class, jmcomic will instantiate it with self.option
                 self.option.download_album(album_id, downloader=McpProgressDownloader)
                 self.logger.info(f"Download completed for album {album_id}")
+            except Exception:
+                self.logger.exception(f"Download failed for album {album_id}")
+                raise
+            else:
                 return "success"
-            except Exception as e:
-                self.logger.error(f"Download failed for album {album_id}: {str(e)}")
-                raise e
 
         # 4. Execute (Blocking but in thread)
         try:
@@ -503,10 +504,11 @@ class JmcomicService:
                 self.logger.info(f"Starting download for photo {photo_id}")
                 self.option.download_photo(photo_id, downloader=McpPhotoProgressDownloader)
                 self.logger.info(f"Download completed for photo {photo_id}")
+            except Exception:
+                self.logger.exception(f"Download failed for photo {photo_id}")
+                raise
+            else:
                 return "success"
-            except Exception as e:
-                self.logger.error(f"Download failed for photo {photo_id}: {str(e)}")
-                raise e
 
         # Execute (Blocking but in thread)
         try:

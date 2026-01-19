@@ -16,10 +16,38 @@ This skill enables you to interact with JMComic (18comic), a popular manga platf
 Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
-- Download entire albums or specific chapters (**Returns status and download path**) - *Progress reported via server logs*
+- Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
 - **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **custom output paths**
+
+### 📥 Download Tools Return Structured Data
+
+Both `download_album` and `download_photo` now return structured dictionaries:
+
+**`download_album(album_id: str, ctx: Context = None)`** returns:
+```python
+{
+    "status": "success" | "failed",
+    "album_id": str,
+    "title": str,
+    "download_path": str,  # Absolute path to download directory
+    "error": str | None
+}
+```
+
+**`download_photo(photo_id: str, ctx: Context = None)`** returns:
+```python
+{
+    "status": "success" | "failed",
+    "photo_id": str,
+    "image_count": int,
+    "download_path": str,  # Absolute path to download directory
+    "error": str | None
+}
+```
+
+**Real-time Progress Tracking**: Both methods accept an optional `ctx: Context` parameter (automatically injected by FastMCP). When provided, progress updates are sent via MCP notifications in real-time, allowing AI agents to monitor download progress.
 
 ## Core Capabilities
 
