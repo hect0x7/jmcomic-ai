@@ -673,6 +673,7 @@ class JmcomicService:
                 - album_id: String album ID
                 - process_type: The type of processing performed
                 - output_path: Absolute path to the generated file or directory
+                - is_directory: Boolean indicating whether output_path is a directory (True) or file (False)
                 - message: Feedback message
         """
         from jmcomic import JmAlbumDetail, JmModuleConfig
@@ -785,15 +786,15 @@ class JmcomicService:
                             sample_path = plugin.decide_filepath(
                                 album, first_photo, filename_rule, suffix, zip_dir, dir_rule_dict
                             )
-                            output_path = os.path.dirname(sample_path)
+                            output_path = str(Path(sample_path).parent.resolve())
                             is_directory = True
                         else:
                             # Fallback if no photos found
-                            output_path = os.path.abspath(zip_dir)
+                            output_path = str(Path(zip_dir).resolve())
                             is_directory = True
                     else:
                         # Simple resolution when dir_rule_dict is not provided
-                        output_path = os.path.abspath(zip_dir)
+                        output_path = str(Path(zip_dir).resolve())
                         is_directory = True
 
             elif process_type == 'img2pdf':
@@ -802,7 +803,8 @@ class JmcomicService:
                 filename_rule = actual_params.get('filename_rule', 'Pid')
                 suffix = actual_params.get('suffix', 'pdf')
 
-                output_path = plugin.decide_filepath(album, None, filename_rule, suffix, pdf_dir, dir_rule_dict)
+                pdf_path = plugin.decide_filepath(album, None, filename_rule, suffix, pdf_dir, dir_rule_dict)
+                output_path = str(Path(pdf_path).resolve())
 
             self.logger.info(f"Post-process '{process_type}' finished for album {album_id}")
             return {
