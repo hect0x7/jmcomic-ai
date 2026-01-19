@@ -815,11 +815,11 @@ class JmcomicService:
             }
 
         except Exception as e:
-            self.logger.exception(f"Post-process failed: {e}")
+            self.logger.exception("Post-process failed")
             return {
                 "status": "error",
                 "album_id": album_id,
                 "process_type": process_type,
                 "output_path": "",
-                "message": f"Post-process failed: {str(e)}"
+                "message": f"Post-process failed: {e}"
             }
