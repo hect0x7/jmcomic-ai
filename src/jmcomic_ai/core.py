@@ -722,7 +722,11 @@ class JmcomicService:
                 expected_path = self.option.dir_rule.decide_album_root_dir(album)
                 self.logger.error(f"No downloaded images found. Expected path: {expected_path}")
                 return {
-                    "status": "error", "album_id": album_id, "process_type": process_type,
+                    "status": "error",
+                    "album_id": album_id,
+                    "process_type": process_type,
+                    "output_path": "",
+                    "is_directory": False,
                     "message": f"Error: No downloaded images found for album {album_id}."
                 }
 
@@ -732,7 +736,14 @@ class JmcomicService:
             # 3. Setup Plugin and Parameters
             pclass = JmModuleConfig.REGISTRY_PLUGIN.get(process_type)
             if pclass is None:
-                return {"status": "error", "message": f"Plugin '{process_type}' not found."}
+                return {
+                    "status": "error",
+                    "album_id": album_id,
+                    "process_type": process_type,
+                    "output_path": "",
+                    "is_directory": False,
+                    "message": f"Plugin '{process_type}' not found."
+                }
 
             actual_params = params.copy() if params else {}
 
@@ -784,5 +795,6 @@ class JmcomicService:
                 "album_id": album_id,
                 "process_type": process_type,
                 "output_path": "",
+                "is_directory": False,
                 "message": f"Post-process failed: {e}"
             }

@@ -63,13 +63,15 @@ This skill supports advanced post-processing of downloaded manga. It returns str
 ```python
 {
     "status": "success" | "error",
-    "process_type": str,
-    "album_id": str,
-    "output_path": str,  # Absolute path to generated file/directory
-    "is_directory": bool,  # True if output is a directory (e.g., photo-level zip)
-    "message": str
+    "process_type": str,  # Process type used
+    "album_id": str,  # Album ID processed
+    "output_path": str,  # Absolute path to generated file/directory (empty string on error)
+    "is_directory": bool,  # True if output is a directory (e.g., photo-level zip), False on error
+    "message": str  # Success/error message
 }
 ```
+
+**All fields are always present**. On error, `output_path` will be an empty string and `is_directory` will be `False`.
 
 **Output Control**: Use `dir_rule` for custom output paths. If omitted, files are saved in the configured default directory.
 
