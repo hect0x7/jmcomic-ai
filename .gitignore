@@ -86,6 +86,5 @@ reference/jmcomic_src/
 # Ignore PNG files in output directories but allow documentation images
 outputs/**/*.png
 assets/downloads/**/*.png
-[0-9]*/**/*.png
 [0-9]*/
 temp_test_skills/
