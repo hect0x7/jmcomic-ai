@@ -673,8 +673,14 @@ class JmcomicService:
                     2. Zip (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
                     3. PDF (Album): `{"dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
                     4. PDF (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
-                    5. LongImg (Album): `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
-                    6. LongImg (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
+                    #### 3. Long Image Merging (`process_type="long_img"`)
+                    *   **Album Level (All pages combined into one huge image)**:
+                        `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
+                    *   **Photo Level (One long image per chapter)**:
+                        `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
+
+                    > ⚠️ **Best Practice - Avoiding Overwrites**: 
+                    > When processing multiple different albums (e.g., in a loop) into the same `base_dir`, ALWAYS include unique identifiers like `{Aid}` or `{Atitle}` in your `rule`. Using a static rule like `"Bd/output.pdf"` will cause subsequent albums to overwrite previous ones.
                 - `filename_rule`: Standard filename rule (used if `dir_rule` is absent).
                 - `delete_original_file`: Boolean.
         """
