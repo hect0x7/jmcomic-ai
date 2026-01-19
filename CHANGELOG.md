@@ -9,18 +9,21 @@
 
 ### Changed
 - 🔄 **工具输出结构化**：`download_album` 与 `post_process` 现在返回结构化的字典（包含 `status`, `download_path` 等字段）而非纯文本，以提升 AI 代理的自动化处理与验证能力。
+- 🛠️ **后处理逻辑重构**：彻底简化 `post_process` 传参设计，取消冗余的 `output_dir` 抽象，回归 `jmcomic` 原生参数体系，统一使用 `dir_rule` 作为路径控制入口。
+- 📚 **文档与示例补全**：在 `SKILL.md` 与代码注释中新增了涵盖 Zip、PDF、LongImg 在 Album/Photo 级别全部 6 种组合的 `dir_rule` 使用范例。
 
 ### Added
 - 📈 **实时进度追踪**：`download_album` 现已支持发送 MCP 进度通知，允许客户端实时显示下载进度。
 - 🧪 **集成测试增强**：新增 `test_tool_download_album_with_progress` 测试用例，验证进度捕获与结构化返回值的正确性。
-- 📄 **文档完善**：更新 `SKILL.md`，明确了后处理插件（Zip/PDF/LongImg）的功能描述及 `dir_rule` 自定义路径参数的用法。
 - 📘 **开发规范**：在 `AGENTS.md` 中强制要求每次代码修改后必须同步更新 `CHANGELOG.md`，确保变更记录不遗漏。
 
 ### Fixed
 - 🛡️ **异常处理增强**：为 `download_album` 和 `download_photo` 的 MCP 进度回调添加异常保护，防止进度报告失败导致下载中止。
 - 🧹 **代码重构**：
   - 将 MCP 上下文回调保护逻辑提取为局部辅助函数 `safe_ctx_call`，消除重复代码。
-  - 在 `post_process` 中统一使用 `pathlib.Path` 处理路径，替代 `os.path`，确保返回绝对路径。
+  - 在 `post_process` 中统一使用 `pathlib.Path` 处理路径，确保返回绝对路径。
+  - 修复了 `post_process` 成功时可能导致重复返回结果的冗余代码。
+  - 修正并增强了 `long_img` 后处理的路径预测准确性。
   - 优化异常日志格式，`logger.exception()` 不再重复记录异常信息。
 - 📝 **文档完善**：
   - 在 `post_process` 文档中补充 `is_directory` 字段说明。

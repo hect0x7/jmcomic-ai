@@ -659,24 +659,24 @@ class JmcomicService:
 
     def post_process(self, album_id: str, process_type: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """
-        Perform post-processing (Zip, PDF, LongImage) on an already downloaded album.
-
-        This tool leverages jmcomic's native plugin system to process downloaded comic files.
-        It is thread-safe and does not modify the global configuration.
+        Perform post-processing (Zip, PDF, LongImage) on a downloaded album.
 
         Args:
             album_id: The ID of the album to process.
-            process_type: The type of processing to perform. Options: "zip", "img2pdf", "long_img".
-            params: Optional dictionary of parameters for the specific plugin.
-
-        Returns:
-            Dictionary containing:
-                - status: "success" or "error"
-                - album_id: String album ID
-                - process_type: The type of processing performed
-                - output_path: Absolute path to the generated file or directory
-                - is_directory: Boolean indicating whether output_path is a directory (True) or file (False)
-                - message: Feedback message
+            process_type: "zip", "img2pdf", or "long_img".
+            params: Plugin parameters. Supports:
+                - `dir_rule`: Native jmcomic DirRule dict (Highest Priority).
+                    Dictionary format: `{"rule": "DSL", "base_dir": "PATH"}`.
+                    Examples:
+                    Examples (All 6 combinations):
+                    1. Zip (Album): `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics/Archives"}}`
+                    2. Zip (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
+                    3. PDF (Album): `{"dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
+                    4. PDF (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
+                    5. LongImg (Album): `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
+                    6. LongImg (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
+                - `filename_rule`: Standard filename rule (used if `dir_rule` is absent).
+                - `delete_original_file`: Boolean.
         """
         from jmcomic import JmAlbumDetail, JmModuleConfig
 
@@ -714,101 +714,54 @@ class JmcomicService:
 
             if not photo_dict:
                 expected_path = self.option.dir_rule.decide_album_root_dir(album)
-                self.logger.error(
-                    f"No downloaded images found for album {album_id}. "
-                    f"Expected path: {expected_path}"
-                )
+                self.logger.error(f"No downloaded images found. Expected path: {expected_path}")
                 return {
-                    "status": "error",
-                    "album_id": album_id,
-                    "process_type": process_type,
-                    "output_path": "",
-                    "message": f"Error: No downloaded images found for album {album_id}. Expected path: {expected_path}"
+                    "status": "error", "album_id": album_id, "process_type": process_type,
+                    "message": f"Error: No downloaded images found for album {album_id}."
                 }
 
             mock_downloader.download_success_dict[album] = photo_dict
-            self.logger.info(f"Found {len(photo_dict)} chapters and {total_images} images for post-processing.")
+            self.logger.info(f"Found {len(photo_dict)} chapters and {total_images} images.")
 
-            # 3. Safe Plugin Invocaton (No pollution to self.option)
+            # 3. Setup Plugin and Parameters
             pclass = JmModuleConfig.REGISTRY_PLUGIN.get(process_type)
             if pclass is None:
-                self.logger.error(
-                    f"Plugin '{process_type}' not found. "
-                    f"Available plugins: {list(JmModuleConfig.REGISTRY_PLUGIN.keys())}"
-                )
-                return {
-                    "status": "error",
-                    "album_id": album_id,
-                    "process_type": process_type,
-                    "output_path": "",
-                    "message": f"Error: Plugin '{process_type}' not found."
-                }
+                return {"status": "error", "message": f"Plugin '{process_type}' not found."}
 
-            # Construct actual params
             actual_params = params.copy() if params else {}
-            if 'filename_rule' not in actual_params:
-                actual_params['filename_rule'] = 'Aid'
 
-            # Add required engine data for the plugin
-            actual_params.update({
-                'album': album,
-                'downloader': mock_downloader
-            })
+            if 'filename_rule' not in actual_params:
+                actual_params['filename_rule'] = 'Aid' if process_type != 'zip' else 'Ptitle'
+
+            actual_params.update({'album': album, 'downloader': mock_downloader})
 
             # Instantiate and invoke
             plugin = pclass.build(self.option)
             plugin.invoke(**actual_params)
 
             # 4. Predict Output Path
-            # Use dir_rule from params if available, otherwise use default
-            dir_rule_dict = actual_params.get('dir_rule')
+            suffix_map = {'zip': actual_params.get('suffix', 'zip'), 'img2pdf': 'pdf', 'long_img': 'png'}
+            suffix = suffix_map.get(process_type, 'unknown')
 
-            # Use specific logic for known plugins to predict path
+            # Extract common params for decide_filepath
+            dir_rule_dict = actual_params.get('dir_rule')
+            filename_rule = actual_params.get('filename_rule')
+
             output_path = "unknown"
             is_directory = False
 
-            if process_type == 'zip':
-                # ZipPlugin defaults: level='photo', zip_dir='./'
-                level = actual_params.get('level', 'photo')
-                zip_dir = actual_params.get('zip_dir', './')
-                filename_rule = actual_params.get('filename_rule', 'Ptitle')
-                suffix = actual_params.get('suffix', 'zip')
+            # Special case for Zip photo level (multiple files)
+            if process_type == 'zip' and actual_params.get('level', 'photo') == 'photo':
+                first_photo = next(iter(photo_dict.keys()))
+                # Plugin ignore base_dir if dir_rule_dict is present
+                sample_path = plugin.decide_filepath(album, first_photo, filename_rule, suffix, None, dir_rule_dict)
+                output_path = str(Path(sample_path).parent.resolve())
+                is_directory = True
+            else:
+                raw_path = plugin.decide_filepath(album, None, filename_rule, suffix, None, dir_rule_dict)
+                output_path = str(Path(raw_path).resolve())
 
-                if level == 'album':
-                    output_path = plugin.decide_filepath(album, None, filename_rule, suffix, zip_dir, dir_rule_dict)
-                else:
-                    # For photo level, it creates multiple files in the zip_dir
-                    # We return the directory path
-                    if dir_rule_dict:
-                        # Use decide_filepath to resolve the correct directory
-                        # Get the first photo to determine the output directory
-                        first_photo = next(iter(photo_dict.keys()), None)
-                        if first_photo:
-                            # decide_filepath returns a file path, extract its directory
-                            sample_path = plugin.decide_filepath(
-                                album, first_photo, filename_rule, suffix, zip_dir, dir_rule_dict
-                            )
-                            output_path = str(Path(sample_path).parent.resolve())
-                            is_directory = True
-                        else:
-                            # Fallback if no photos found
-                            output_path = str(Path(zip_dir).resolve())
-                            is_directory = True
-                    else:
-                        # Simple resolution when dir_rule_dict is not provided
-                        output_path = str(Path(zip_dir).resolve())
-                        is_directory = True
-
-            elif process_type == 'img2pdf':
-                # Img2pdfPlugin defaults: pdf_dir=None, filename_rule='Pid', suffix='pdf'
-                pdf_dir = actual_params.get('pdf_dir')  # None implies current dir or handled by plugin
-                filename_rule = actual_params.get('filename_rule', 'Pid')
-                suffix = actual_params.get('suffix', 'pdf')
-
-                pdf_path = plugin.decide_filepath(album, None, filename_rule, suffix, pdf_dir, dir_rule_dict)
-                output_path = str(Path(pdf_path).resolve())
-
-            self.logger.info(f"Post-process '{process_type}' finished for album {album_id}")
+            self.logger.info(f"Post-process '{process_type}' finished. Output: {output_path}")
             return {
                 "status": "success",
                 "process_type": process_type,

@@ -19,7 +19,7 @@ Activate this skill when the user wants to:
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
-- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **custom output paths**
+- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **unified output paths** (`output_dir` & `dir_rule`)
 
 ### 📥 Download Tools Return Structured Data
 
@@ -57,12 +57,35 @@ This skill supports advanced post-processing of downloaded manga. It returns str
 
 - **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file.
 - **📄 PDF Conversion**: Merge all images of an album into a single PDF document.
-- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image.
+**Output Control**: Use `dir_rule` for custom output paths. If omitted, files are saved in the configured default directory.
 
-**Custom Output Paths**: You can now specify a `dir_rule` in the parameters to control where the output file is saved.
-Example `params` for `post_process`: `{"dir_rule": {"base_dir": "/custom/path"}}`
+### 🧩 Post-Process `dir_rule` Examples
 
-**Workflow Suggestion**: Use `download_album` first, then call `post_process`. Check the returned dictionary for the `output_path`.
+The `dir_rule` parameter takes a dictionary: `{"rule": "DSL_STRING", "base_dir": "BASE_PATH"}`. 
+- **`Bd`**: Refers to `base_dir`.
+- **`Axxx`**: Album attributes (e.g., `Aid`, `Atitle`, `Aauthor`).
+- **`Pxxx`**: Photo/Chapter attributes (e.g., `Pid`, `Ptitle`, `Pindex`).
+- **`{attr}`**: Python string format support for any metadata attribute.
+
+#### 1. ZIP Compression (`process_type="zip"`)
+*   **Album Level (Single ZIP for entire manga)**:
+    `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics/Archives"}}`
+*   **Photo Level (Individual ZIP for each chapter)**:
+    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
+
+#### 2. PDF Conversion (`process_type="img2pdf"`)
+*   **Album Level (One PDF for all chapters combined)**:
+    `{"level": "album", "dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
+*   **Photo Level (One PDF per chapter)**:
+    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
+
+#### 3. Long Image Merging (`process_type="long_img"`)
+*   **Album Level (All pages combined into one huge image)**:
+    `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
+*   **Photo Level (One long image per chapter)**:
+    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
+
+**Workflow Suggestion**: Use `download_album` first to ensure source images exist, then call `post_process`. The tool returns the **actual predicted path** of the result.
  
 This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
  

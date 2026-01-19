@@ -23,15 +23,8 @@ def main():
         if args.type == "long_img":
             parser.error("--password is only supported for zip or img2pdf")
         params["encrypt"] = {"password": args.password}
-
-    # Map outdir to correct plugin parameter
     if args.outdir:
-        if args.type == "zip":
-            params["zip_dir"] = args.outdir
-        elif args.type == "img2pdf":
-            params["pdf_dir"] = args.outdir
-        elif args.type == "long_img":
-            params["img_dir"] = args.outdir
+        params["dir_rule"] = {"rule": "Bd", "base_dir": args.outdir}
 
     result = service.post_process(args.id, args.type, params)
     print(result)
