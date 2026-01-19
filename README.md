@@ -28,11 +28,13 @@
 
 ### 📸 使用样例 (Usage Samples)
 
-以下示例基于 `cursor` 和 mcp sse 模式
+以下示例基于 `cursor`/`antigravity` 和 mcp 模式
 
-| 1. 工具列表加载 | 2. 智能搜索 | 3. 获取详情 |
-| :---: | :---: | :---: |
-| ![MCP Tools List](images/sample_list_mcp_tools.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) |
+| 1. 工具列表加载 | 2. 智能搜索 | 3. 获取详情 | 4. 修改配置 |
+| :---: | :---: | :---: | :---: |
+| ![MCP Tools List](images/sample_list_mcp_tools.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Update Option](images/sample_update_option.png) |
+| **5. 下载并转 PDF / ZIP** | | | |
+| ![Download and PDF](images/sample_download_album_convert_pdf.png) | | | |
 
 ---
 

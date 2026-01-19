@@ -15,13 +15,21 @@ The mission of this project is to **transform the JMComic crawler into an AI-nat
 - **`src/jmcomic_ai/mcp/server.py`**: The "Interface". Uses `FastMCP` to dynamically register methods from `JmcomicService` as MCP tools.
 - **`reference/jmcomic_src/`**: The "Knowledge Base". Contains the source code of the underlying `jmcomic` library. **Always read this first** when implementing new tools.
 
+> [!IMPORTANT]
+> **CRITICAL SOURCE CODE RULE**
+> Do **NOT** attempt to locate the `jmcomic` source code using `python -c "import jmcomic; print(jmcomic.__file__)"` or `pip show`.
+> The installed version in site-packages is **IRRELEVANT** for development reference.
+> You **MUST** strictly use the local copy in `reference/jmcomic_src/` for all code analysis and logic extraction.
+> Ignoring this rule leads to incorrect path assumptions and wasted steps.
+
 ## 🛠️ Development Workflow (Recommended for Agents)
 
 When asked to add a new feature or tool, follow these steps:
 
 ### 1. Research & Discovery
+- **STOP & READ**: Go directly to `reference/jmcomic_src/`. Do not check installed packages.
 - Search `reference/jmcomic_src/` to find the relevant logic in the base library.
-- For example, if adding a "favorite" feature, search for `favorite` in the reference code to see how `JmClient` handles it.
+- For example, if adding a "favorite" feature, search for `favorite` in the reference code to see how `JmcomicClient` handles it.
 
 ### 2. Implement in `JmcomicService`
 - Add the method to `src/jmcomic_ai/core.py`.
@@ -47,6 +55,11 @@ When asked to add a new feature or tool, follow these steps:
 ### 5. Verify the MCP Integration
 - Run `uv run python tests/test_mcp_integration.py` (or use `python -m unittest discover tests` for all tests).
 - Ensure the new tool appears in the `list_tools` output and executes correctly via the SSE transport.
+
+### 6. Record Changes in Changelog
+- **Critical**: You **MUST** document your changes in `CHANGELOG.md` after every code modification.
+- Add a concise entry under the content for the current version.
+- Classify your change type: `Added`, `Changed`, `Fixed`, or `Removed`.
 
 ## 📜 Coding Standards for Agents
 

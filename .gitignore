@@ -83,6 +83,8 @@ reference/jmcomic_src/
 # --- Post-process outputs ---
 *.pdf
 *.zip
-*.png
+# Ignore PNG files in output directories but allow documentation images
+outputs/**/*.png
+assets/downloads/**/*.png
 [0-9]*/
 temp_test_skills/

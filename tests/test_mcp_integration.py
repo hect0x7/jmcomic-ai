@@ -14,11 +14,6 @@ import contextlib
 import time
 import socket
 from multiprocessing import Process
-import sys
-import os
-
-# Add src to path so jmcomic_ai can be imported without installation
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -189,13 +184,37 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             print("\n[OK] download_photo executed successfully")
 
     async def test_tool_download_album(self):
-        """Test download_album tool (async background)"""
-        async with self._mcp_session() as session:
-            print(f"\n=== Testing download_album(album_id='{TEST_ALBUM_ID}') ===")
-            result = await session.call_tool("download_album", {"album_id": TEST_ALBUM_ID})
-            print(f"  Result: {result}")
-            self.assertIsNotNone(result)
-            print("\n[OK] download_album executed successfully (background task)")
+        """Test download_album tool with real-time progress capture"""
+        # 用于收集进度事件
+        progress_events = []
+
+        # 定义日志回调函数
+        async def logging_callback(params):
+            """捕获服务端发送的日志通知"""
+            level = params.level
+            message = params.data if hasattr(params, 'data') else str(params)
+            progress_events.append(f"[{level}] {message}")
+            print(f"  📊 Progress: [{level}] {message}")
+
+        # 创建带有 logging_callback 的 session
+        async with sse_client(self._server_url) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream, logging_callback=logging_callback) as session:
+                await session.initialize()
+
+                print(f"\n=== Testing download_album(album_id='{TEST_ALBUM_ID}') with Progress Tracking ===")
+
+                # 调用下载工具
+                result = await session.call_tool("download_album", {"album_id": TEST_ALBUM_ID})
+
+                print(f"\n  Final Result: {result}")
+                print(f"\n  Captured {len(progress_events)} progress events:")
+                for event in progress_events[:10]:  # 只显示前10条
+                    print(f"    - {event}")
+                if len(progress_events) > 10:
+                    print(f"    ... and {len(progress_events) - 10} more events")
+
+                self.assertIsNotNone(result)
+                print("\n[OK] download_album executed successfully with progress tracking")
 
     async def test_tool_update_option(self):
         """Test update_option tool"""

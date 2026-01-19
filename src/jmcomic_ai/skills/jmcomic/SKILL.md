@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.5"
+  version: "0.0.6"
   dependencies: python>=3.10
 ---
 
@@ -16,22 +16,95 @@ This skill enables you to interact with JMComic (18comic), a popular manga platf
 Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
-- Download entire albums or specific chapters (**Now returns the predicted download path**)
+- Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
-- **NEW**: Post-process downloaded content (Zip, PDF, LongImage)
+- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **native parameters or `dir_rule`**
+
+### 📥 Download Tools Return Structured Data
+
+Both `download_album` and `download_photo` now return structured dictionaries:
+
+**`download_album(album_id: str, ctx: Context = None)`** returns:
+```python
+{
+    "status": "success" | "failed",
+    "album_id": str,
+    "title": str,
+    "download_path": str,  # Absolute path to download directory
+    "error": str | None
+}
+```
+
+**`download_photo(photo_id: str, ctx: Context = None)`** returns:
+```python
+{
+    "status": "success" | "failed",
+    "photo_id": str,
+    "image_count": int,
+    "download_path": str,  # Absolute path to download directory
+    "error": str | None
+}
+```
+
+**Real-time Progress Tracking**: Both methods accept an optional `ctx: Context` parameter (automatically injected by FastMCP). When provided, progress updates are sent via MCP notifications in real-time, allowing AI agents to monitor download progress.
 
 ## Core Capabilities
 
 ### 🛠️ Post-Processing (New in 0.0.6)
 
-This skill now supports advanced post-processing of downloaded manga. These tools allow you to transform discrete image files into more user-friendly formats:
+This skill supports advanced post-processing of downloaded manga. It returns structured data including the **output path** of the generated file.
 
-- **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file. Supports **AES Encryption** for security.
-- **📄 PDF Conversion**: Merge all images of an album into a single, high-quality PDF document. Perfect for mobile reading.
-- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image (vertical scroll mode).
+- **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file.
+- **📄 PDF Conversion**: Merge all images of an album into a single PDF document.
+- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image.
 
-**Workflow Suggestion**: Use `download_album` first to ensure images are on disk, then call `post_process` to package them as needed.
+**`post_process(album_id: str, process_type: str, params: dict = None)`** returns:
+```python
+{
+    "status": "success" | "error",
+    "process_type": str,  # Process type used
+    "album_id": str,  # Album ID processed
+    "output_path": str,  # Absolute path to generated file/directory (empty string on error)
+    "is_directory": bool,  # True if output is a directory (e.g., photo-level zip), False on error
+    "message": str  # Success/error message
+}
+```
+
+**All fields are always present**. On error, `output_path` will be an empty string and `is_directory` will be `False`.
+
+**Output Control**: Use `dir_rule` for custom output paths. If omitted, files are saved in the configured default directory.
+
+### 🧩 Post-Process `dir_rule` Examples
+
+The `dir_rule` parameter takes a dictionary: `{"rule": "DSL_STRING", "base_dir": "BASE_PATH"}`. 
+- **`Bd`**: Refers to `base_dir`.
+- **`Axxx`**: Album attributes (e.g., `Aid`, `Atitle`, `Aauthor`).
+- **`Pxxx`**: Photo/Chapter attributes (e.g., `Pid`, `Ptitle`, `Pindex`).
+- **`{attr}`**: Python string format support for any metadata attribute.
+
+#### 1. ZIP Compression (`process_type="zip"`)
+*   **Album Level (Single ZIP for entire manga)**:
+    `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics/Archives"}}`
+*   **Photo Level (Individual ZIP for each chapter)**:
+    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
+
+#### 2. PDF Conversion (`process_type="img2pdf"`)
+*   **Album Level (One PDF for all chapters combined)**:
+    `{"level": "album", "dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
+*   **Photo Level (One PDF per chapter)**:
+    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
+
+#### 3. Long Image Merging (`process_type="long_img"`)
+*   **Album Level (All pages combined into one huge image)**:
+    `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
+*   **Photo Level (One long image per chapter)**:
+    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
+
+> ⚠️ **Best Practice - Avoiding Overwrites**: 
+> When processing multiple different albums (e.g., in a loop) into the same `base_dir`, ALWAYS include unique identifiers like `{Aid}` or `{Atitle}` in your `rule`. Using a static rule like `"Bd/output.pdf"` will cause subsequent albums to overwrite previous ones.
+
+**Workflow Suggestion**: Use `download_album` first to ensure source images exist, then call `post_process`. The tool returns the **actual predicted path** of the result.
  
 This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
  

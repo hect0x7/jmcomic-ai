@@ -29,6 +29,9 @@ def parse_body(body):
     If the body contains semicolons, split it into numbered points.
     Otherwise, return the body as-is.
     """
+    # Support Chinese semicolon
+    body = body.replace('；', ';')
+
     if ';' not in body:
         return body
 
