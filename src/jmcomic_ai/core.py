@@ -324,6 +324,7 @@ class JmcomicService:
                 - album_id: String album ID
                 - title: Album title
                 - download_path: Absolute path to the download directory
+                - error: Error message if status is "failed", None otherwise
         """
         import asyncio
         import threading
@@ -450,6 +451,7 @@ class JmcomicService:
                 - photo_id: String photo ID
                 - image_count: Number of images downloaded
                 - download_path: Absolute path to the download directory
+                - error: Error message if status is "failed", None otherwise
         """
         import asyncio
         from jmcomic import JmDownloader, JmPhotoDetail, JmImageDetail
