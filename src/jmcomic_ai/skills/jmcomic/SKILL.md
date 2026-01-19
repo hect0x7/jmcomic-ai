@@ -19,7 +19,7 @@ Activate this skill when the user wants to:
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
-- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **unified output paths** (`output_dir` & `dir_rule`)
+- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **native parameters or `dir_rule`**
 
 ### 📥 Download Tools Return Structured Data
 
