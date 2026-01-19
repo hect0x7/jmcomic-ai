@@ -57,6 +57,20 @@ This skill supports advanced post-processing of downloaded manga. It returns str
 
 - **📦 Zip Compression**: Pack an entire album or individual chapters into a ZIP file.
 - **📄 PDF Conversion**: Merge all images of an album into a single PDF document.
+- **🖼️ Long Image Merging**: Combine all pages of a chapter into one continuous long image.
+
+**`post_process(album_id: str, process_type: str, params: dict = None)`** returns:
+```python
+{
+    "status": "success" | "error",
+    "process_type": str,
+    "album_id": str,
+    "output_path": str,  # Absolute path to generated file/directory
+    "is_directory": bool,  # True if output is a directory (e.g., photo-level zip)
+    "message": str
+}
+```
+
 **Output Control**: Use `dir_rule` for custom output paths. If omitted, files are saved in the configured default directory.
 
 ### 🧩 Post-Process `dir_rule` Examples
