@@ -16,6 +16,17 @@
 - 📄 **文档完善**：更新 `SKILL.md`，明确了后处理插件（Zip/PDF/LongImg）的功能描述及 `dir_rule` 自定义路径参数的用法。
 - 📘 **开发规范**：在 `AGENTS.md` 中强制要求每次代码修改后必须同步更新 `CHANGELOG.md`，确保变更记录不遗漏。
 
+### Fixed (2026-01-19)
+- 🛡️ **异常处理增强**：为 `download_album` 和 `download_photo` 的 MCP 进度回调添加异常保护，防止进度报告失败导致下载中止。
+- 🧹 **代码重构**：
+  - 将 MCP 上下文回调保护逻辑提取为局部辅助函数 `safe_ctx_call`，消除重复代码。
+  - 在 `post_process` 中统一使用 `pathlib.Path` 处理路径，替代 `os.path`，确保返回绝对路径。
+  - 优化异常日志格式，`logger.exception()` 不再重复记录异常信息。
+- 📝 **文档完善**：
+  - 在 `post_process` 文档中补充 `is_directory` 字段说明。
+  - 在 `download_album` 和 `download_photo` 文档中补充 `error` 字段说明。
+  - 确保所有工具方法的返回值文档完整准确。
+
 
 ---
 
