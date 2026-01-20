@@ -17,6 +17,8 @@
 
 **JMComic AI** 是为 [JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python) 提供的 **MCP (Model Context Protocol) 支持** 和 **AI Skills 增强**。
 
+![项目介绍](images/introduction.png)
+
 传统的爬虫工具虽然高效，但在处理模糊需求时往往力不从心。你必须记住精确的 ID 或关键字，还要手动配置各种参数。
 
 本项目通过两个维度解决这个问题：
@@ -30,11 +32,11 @@
 
 以下示例基于 `cursor`/`antigravity` 和 mcp 模式
 
-| 1. 工具列表加载 | 2. 智能搜索 | 3. 获取详情 | 4. 修改配置 |
+| 1. 下载本子并转 PDF / ZIP | 2. 搜索【无修正】本子 | 3. 查详情 350234  | 4. 查询月度最多爱心前10本子 |
 | :---: | :---: | :---: | :---: |
-| ![MCP Tools List](images/sample_list_mcp_tools.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Update Option](images/sample_update_option.png) |
-| **5. 下载并转 PDF / ZIP** | | | |
-| ![Download and PDF](images/sample_download_album_convert_pdf.png) | | | |
+| ![Download and PDF](images/sample_download_album_convert_pdf.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Month Ranking by Likes](images/sample_month_ranking_by_score.png) |
+| **5. 修改option配置** | | | |
+| ![Update Option](images/sample_update_option.png) | | | |
 
 ---
 

@@ -144,25 +144,25 @@ class JmcomicService:
         [not a tool]
         """
         self.option = self._load_option()
+        self.client = self.option.build_jm_client()
 
     def update_option(self, option_updates: dict[str, Any]) -> str:
         """
-        Update JMComic option and save to file.
+        更新 JMComic 配置并保存到文件。
 
-        CRITICAL: This tool performs limited validation. 
-        Before calling this tool, you MUST read the JmOption syntax/structure 
-        by accessing the following resources:
-        - `jmcomic://option/schema`: For parameter types and structural constraints.
-        - `jmcomic://option/reference`: For detailed field descriptions and examples.
+        重要提示：此工具仅执行有限的验证。
+        在调用此工具之前，建议先查看以下资源了解 JmOption 语法：
+        - `jmcomic://option/schema`: 参数类型和结构约束。
+        - `jmcomic://option/reference`: 字段详细说明和示例。
 
-        Args:
-            option_updates: Dictionary containing option updates to merge.
-                           Supports nested updates for client, download, dir_rule, etc.
+        参数:
+            option_updates: 要合并的配置更新字典。
+                           支持对 client、download、dir_rule 等进行嵌套更新。
 
-        Returns:
-            Success message with file path, or error message if update fails.
+        返回:
+            包含文件路径的成功消息，或错误消息。
 
-        Example:
+        示例:
             option_updates = {
                 "client": {"impl": "api"},
                 "download": {"threading": {"image": 50}}
@@ -182,7 +182,7 @@ class JmcomicService:
             new_option.to_file(str(self.option_path))
 
             # 5. 更新内存中的 option
-            self.option = new_option
+            self.reload_option()
 
             self.logger.info("option updated successfully")
             return f"option updated and saved to {self.option_path}"
@@ -203,17 +203,20 @@ class JmcomicService:
         """Parse JmSearchPage/JmCategoryPage content to dictionary"""
         albums = []
 
-        # 使用 jmcomic 提供的迭代器获取 id, title, tags
-        for album_id, title, tags in page.iter_id_title_tag():
+        # 使用 jmcomic 提供的原始 content 获取完整信息
+        for album_id, ainfo in page.content:
             album_id = str(album_id)
-            albums.append(
-                {
-                    "id": album_id,
-                    "title": str(title),
-                    "tags": tags,
-                    "cover_url": JmcomicText.get_album_cover_url(album_id),
-                }
-            )
+            album_dict = {
+                "id": album_id,
+                "title": str(ainfo.get("name", "")),
+                "tags": ainfo.get("tags", []),
+                "cover_url": JmcomicText.get_album_cover_url(album_id),
+            }
+            # 如果有 likes 信息,也添加进去
+            if "likes" in ainfo:
+                album_dict["likes"] = ainfo["likes"]
+            
+            albums.append(album_dict)
 
         return {
             "albums": albums,
@@ -250,20 +253,20 @@ class JmcomicService:
             category: str = "all",
     ) -> dict[str, Any]:
         """
-        Search for albums/comics with advanced filtering options.
+        搜索本子，支持高级过滤选项。
 
-        Args:
-            keyword: Search query string (supports album ID, title, author, tags, etc.)
-            page: Page number, starting from 1 (default: 1)
-            main_tag: Search scope - 0 (站内), 1 (作品), 2 (作者), 3 (标签), 4 (角色) (default: 0)
-            order_by: Sort order - 网页: mr (最新), mv (观看), mp (图片), tf (点赞); API: time, views, likes (default: "latest")
-            time_range: Time filter - all (全部), today (今天), week (本周), month (本月) (default: "all")
-            category: Category filter - "all" or specific category CID (default: "all")
+        参数:
+            keyword: 搜索关键词（支持本子ID、标题、作者、标签等）。
+            page: 页码，从1开始（默认值：1）。
+            main_tag: 搜索范围 - 0 (站内), 1 (作品), 2 (作者), 3 (标签), 4 (角色)（默认值：0）。
+            order_by: 排序方式 - mr (最新), mv (观看), mp (图片), tf (点赞)（默认值："latest"）。
+            time_range: 时间过滤 - all (全部), today (今天), week (本周), month (本月)（默认值："all"）。
+            category: 分类过滤 - "all" 或具体的 CID（默认值："all"）。
 
-        Returns:
-            Dictionary containing:
-                - albums: List of album dictionaries
-                - total_count: Total number of results
+        返回:
+            包含以下内容的字典：
+                - albums: 本子信息列表。
+                - total_count: 结果总数。
         """
         client = self.get_client()
 
@@ -281,50 +284,165 @@ class JmcomicService:
         self.logger.info(f"Search finished: keyword={keyword}, results={len(search_page)}")
         return self._parse_search_page(search_page)
 
-    def get_ranking(self, period: str = "day", page: int = 1) -> dict[str, Any]:
+    def browse_albums(
+        self,
+        category: str = "all",
+        time_range: str = "all",
+        order_by: str = "latest",
+        page: int = 1
+    ) -> dict[str, Any]:
         """
-        Get trending/popular albums from ranking lists.
+        浏览、过滤、排行本子，支持灵活的分类、时间范围和排序选项。
+        
+        该工具结合了分类浏览和排行榜功能，支持：
+        - 浏览特定分类（同人、韩漫等）。
+        - 按时间范围过滤（今天、本周、本月、全部）。
+        - 按不同标准排序（点赞、观看、最新、图片数、评分、评论数）。
+        
+        参数:
+            category: 分类过滤器。可选值：
+                - "all" 或 "0": 全部分类
+                - "doujin": 同人
+                - "single": 单本
+                - "short": 短篇
+                - "hanman": 韩漫
+                - "meiman": 美漫
+                - "doujin_cosplay": Cosplay
+                - "3D": 3D
+                - "another": 其他
+                - "english_site": 英文站
+                (默认值: "all")
+            
+            time_range: 时间范围过滤器。可选值：
+                - "all": 全部时间
+                - "day" 或 "today": 今天
+                - "week": 本周
+                - "month": 本月
+                (默认值: "all")
+            
+            order_by: 排序方式。可选值：
+                - "latest": 最新更新
+                - "likes": 最多点赞
+                - "views": 最多观看
+                - "pictures": 最多图片
+                - "score": 评分最高
+                - "comments": 评论最多
+                (默认值: "latest")
+            
+            page: 页码，从1开始（默认值: 1）
+        
+        返回:
+            包含以下内容的字典：
+                - albums: 本子简要信息列表 (id, title, tags, cover_url)
+                - total_count: 结果总数
+                - error: 如果参数无效，则包含错误信息（可选）
+            
+            注意：该 API 不包含详细统计数据（点赞/观看/作者）。
+                  请使用 get_album_detail() 获取特定本子的完整信息。
 
-        Args:
-            period: Ranking period - "day" (日榜), "week" (周榜), "month" (月榜) (default: "day")
-            page: Page number, starting from 1 (default: 1)
+        示例:
+            # 1. 获取本月点赞排行 (月榜)
+            browse_albums(time_range="month", order_by="likes")
 
-        Returns:
-            Dictionary containing:
-                - albums: List of ranked album dictionaries
-                - total_count: Total number of results
+            # 2. 浏览同人志分类 (最新)
+            browse_albums(category="doujin", order_by="latest")
+
+            # 3. 浏览本周热门韩漫 (特定分类排行榜)
+            browse_albums(category="hanman", time_range="week", order_by="views")
         """
         client = self.get_client()
-        search_page: JmCategoryPage
-        if period == "day":
-            search_page = client.day_ranking(page)
-        elif period == "week":
-            search_page = client.week_ranking(page)
-        elif period == "month":
-            search_page = client.month_ranking(page)
-        else:
-            return {"albums": [], "total_count": 0}
-
+        
+        # Category mapping
+        category_map = {
+            "all": JmMagicConstants.CATEGORY_ALL,
+            "0": JmMagicConstants.CATEGORY_ALL,
+            "doujin": JmMagicConstants.CATEGORY_DOUJIN,
+            "single": JmMagicConstants.CATEGORY_SINGLE,
+            "short": JmMagicConstants.CATEGORY_SHORT,
+            "hanman": JmMagicConstants.CATEGORY_HANMAN,
+            "meiman": JmMagicConstants.CATEGORY_MEIMAN,
+            "doujin_cosplay": JmMagicConstants.CATEGORY_DOUJIN_COSPLAY,
+            "3d": JmMagicConstants.CATEGORY_3D,
+            "another": JmMagicConstants.CATEGORY_ANOTHER,
+            "english_site": JmMagicConstants.CATEGORY_ENGLISH_SITE,
+        }
+        
+        # Time range mapping
+        time_map = {
+            "all": JmMagicConstants.TIME_ALL,
+            "day": JmMagicConstants.TIME_TODAY,
+            "today": JmMagicConstants.TIME_TODAY,
+            "week": JmMagicConstants.TIME_WEEK,
+            "month": JmMagicConstants.TIME_MONTH,
+        }
+        
+        # Sort order mapping
+        order_map = {
+            "latest": JmMagicConstants.ORDER_BY_LATEST,   # mr
+            "likes": JmMagicConstants.ORDER_BY_LIKE,      # tf
+            "views": JmMagicConstants.ORDER_BY_VIEW,      # mv
+            "pictures": JmMagicConstants.ORDER_BY_PICTURE, # mp
+            "score": JmMagicConstants.ORDER_BY_SCORE,     # tr
+            "comments": JmMagicConstants.ORDER_BY_COMMENT, # md
+        }
+        
+        # Validate and map parameters
+        category_value = category_map.get(category.lower())
+        time_value = time_map.get(time_range.lower())
+        order_value = order_map.get(order_by.lower())
+        
+        if category_value is None:
+            valid_categories = ", ".join(category_map.keys())
+            error_msg = f"Invalid category: {category}. Valid options: {valid_categories}"
+            self.logger.error(error_msg)
+            return {"albums": [], "total_count": 0, "error": error_msg}
+        
+        if time_value is None:
+            valid_times = ", ".join(time_map.keys())
+            error_msg = f"Invalid time_range: {time_range}. Valid options: {valid_times}"
+            self.logger.error(error_msg)
+            return {"albums": [], "total_count": 0, "error": error_msg}
+        
+        if order_value is None:
+            valid_orders = ", ".join(order_map.keys())
+            error_msg = f"Invalid order_by: {order_by}. Valid options: {valid_orders}"
+            self.logger.error(error_msg)
+            return {"albums": [], "total_count": 0, "error": error_msg}
+        
+        # Call unified categories_filter API
+        search_page: JmCategoryPage = client.categories_filter(
+            page=page,
+            time=time_value,
+            category=category_value,
+            order_by=order_value,
+            sub_category=None,
+        )
+        
+        self.logger.info(
+            f"Browse albums: category={category}, time_range={time_range}, "
+            f"order_by={order_by}, page={page}, results={len(search_page)}"
+        )
+        
         return self._parse_search_page(search_page)
 
     async def download_album(self, album_id: str, ctx: Context = None) -> dict[str, Any]:
         """
-        Download an entire album/comic in the background.
+        在后台下载整个本子。
 
-        This is a BLOCKING operation that waits for the download to complete.
-        Progress is reported via logs (stdout) and MCP Context events if available.
+        这是一个阻塞操作，会等待下载完成后返回。
+        下载进度会通过日志和 MCP Context（如果可用）实时报告。
 
-        Args:
-            album_id: The album ID to download (e.g., "123456")
-            ctx: MCP Context for real-time progress and logging (injected by FastMCP)
+        参数:
+            album_id: 要下载的本子 ID (例如 "123456")
+            ctx: MCP Context，用于实时报告进度和日志（由 FastMCP 自动注入）
 
-        Returns:
-            Dictionary containing:
-                - status: "success" or "failed"
-                - album_id: String album ID
-                - title: Album title
-                - download_path: Absolute path to the download directory
-                - error: Error message if status is "failed", None otherwise
+        返回:
+            包含以下内容的字典：
+                - status: "success" 或 "failed"
+                - album_id: 本子 ID
+                - title: 本子标题
+                - download_path: 下载目录的绝对路径
+                - error: 如果失败则包含错误信息
         """
         import asyncio
         import threading
@@ -439,19 +557,19 @@ class JmcomicService:
 
     async def download_photo(self, photo_id: str, ctx: Context = None) -> dict[str, Any]:
         """
-        Download a specific chapter/photo from an album.
+        下载本子中的特定章节。
 
-        Args:
-            photo_id: The chapter/photo ID to download (e.g., "123456")
-            ctx: MCP Context for real-time progress and logging (injected by FastMCP)
+        参数:
+            photo_id: 要下载的章节 ID (例如 "123456")
+            ctx: MCP Context，用于实时报告进度和日志（由 FastMCP 自动注入）
 
-        Returns:
-            Dictionary containing:
-                - status: "success" or "failed"
-                - photo_id: String photo ID
-                - image_count: Number of images downloaded
-                - download_path: Absolute path to the download directory
-                - error: Error message if status is "failed", None otherwise
+        返回:
+            包含以下内容的字典：
+                - status: "success" 或 "failed"
+                - photo_id: 章节 ID
+                - image_count: 下载的图片数量
+                - download_path: 下载目录的绝对路径
+                - error: 如果失败则包含错误信息
         """
         import asyncio
         from jmcomic import JmDownloader, JmPhotoDetail, JmImageDetail
@@ -552,17 +670,15 @@ class JmcomicService:
 
     def login(self, username: str, password: str) -> str:
         """
-        Authenticate with JMComic account to access premium features.
+        登录 JMComic 账户以访问更多功能（如收藏夹、高级内容等）。
+        登录后的会话 Cookie 会自动保存，供后续请求使用。
 
-        Login is required to access favorite lists, premium content, and user-specific features.
-        Session cookies are automatically saved for subsequent requests.
+        参数:
+            username: 用户名
+            password: 密码
 
-        Args:
-            username: JMComic account username
-            password: JMComic account password
-
-        Returns:
-            Success message with username, or error message if login fails.
+        返回:
+            登录成功或失败的消息。
         """
         client = self.get_client()
         try:
@@ -575,72 +691,29 @@ class JmcomicService:
 
     def get_album_detail(self, album_id: str) -> dict[str, Any]:
         """
-        Retrieve comprehensive details about a specific album/comic.
+        获取特定本子的详细信息。
 
-        Args:
-            album_id: The album ID (e.g., "123456")
+        参数:
+            album_id: 本子 ID (例如 "123456")
 
-        Returns:
-            Album dictionary containing: id, title, author, likes, views, category,
-            tags, actors, description, chapter_count, update_time, cover_url.
+        返回:
+            包含详细信息的字典：id, title, author, likes, views, category,
+            tags, actors, description, chapter_count, update_time, cover_url。
         """
         client = self.get_client()
         album = client.get_album_detail(album_id)
         return self._parse_album_detail(album)
 
-    def get_category_list(
-            self,
-            category: str = JmMagicConstants.CATEGORY_ALL,
-            page: int = 1,
-            sort_by: str = JmMagicConstants.ORDER_BY_LATEST,
-    ) -> dict[str, Any]:
-        """
-        Browse albums by category with sorting options.
-
-        Args:
-            category: Category filter. Available categories:
-                - "0" or CATEGORY_ALL: 全部 (All)
-                - "doujin" or CATEGORY_DOUJIN: 同人 (Doujin)
-                - "single" or CATEGORY_SINGLE: 单本 (Single Volume)
-                - "short" or CATEGORY_SHORT: 短篇 (Short Story)
-                - "another" or CATEGORY_ANOTHER: 其他 (Other)
-                - "hanman" or CATEGORY_HANMAN: 韩漫 (Korean Comics)
-                - "meiman" or CATEGORY_MEIMAN: 美漫 (American Comics)
-                - "doujin_cosplay" or CATEGORY_DOUJIN_COSPLAY: Cosplay
-                - "3D" or CATEGORY_3D: 3D
-                - "english_site" or CATEGORY_ENGLISH_SITE: 英文站 (English Site)
-                (default: "0")
-            page: Page number, starting from 1 (default: 1)
-            sort_by: Sort order. Available options:
-                - "mr" or ORDER_BY_LATEST: 最新 (Latest)
-                - "mv" or ORDER_BY_VIEW: 观看数 (Most Viewed)
-                - "mp" or ORDER_BY_PICTURE: 图片数 (Most Pictures)
-                - "tf" or ORDER_BY_LIKE: 点赞数 (Most Liked)
-                (default: "mr")
-
-        Returns:
-            Dictionary containing:
-                - albums: List of album dictionaries matching the criteria
-                - total_count: Total number of results
-        """
-        client = self.get_client()
-
-        search_page: JmCategoryPage = client.categories_filter(
-            page=page, time=JmMagicConstants.TIME_ALL, category=category, order_by=sort_by, sub_category=None
-        )
-        return self._parse_search_page(search_page)
-
     def download_cover(self, album_id: str) -> str:
         """
-        Download the cover image of a specific album.
+        下载特定本子的封面图片。
+        封面将保存到默认下载目录下的 'covers' 子目录中。
 
-        The cover image is saved to the 'covers' subdirectory within the configured base directory.
+        参数:
+            album_id: 本子 ID (例如 "123456")
 
-        Args:
-            album_id: The album ID (e.g., "123456")
-
-        Returns:
-            Success message with the saved file path.
+        返回:
+            包含保存路径的成功消息。
         """
         client = self.get_client()
         # Verify album exists
@@ -659,30 +732,14 @@ class JmcomicService:
 
     def post_process(self, album_id: str, process_type: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """
-        Perform post-processing (Zip, PDF, LongImage) on a downloaded album.
+        对已下载的本子进行后处理（生成 Zip、PDF 或长图）。
 
-        Args:
-            album_id: The ID of the album to process.
-            process_type: "zip", "img2pdf", or "long_img".
-            params: Plugin parameters. Supports:
-                - `dir_rule`: Native jmcomic DirRule dict (Highest Priority).
-                    Dictionary format: `{"rule": "DSL", "base_dir": "PATH"}`.
-                    Examples:
-                    Examples (All 6 combinations):
-                    1. Zip (Album): `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics/Archives"}}`
-                    2. Zip (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
-                    3. PDF (Album): `{"dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
-                    4. PDF (Photo): `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
-                    #### 3. Long Image Merging (`process_type="long_img"`)
-                    *   **Album Level (All pages combined into one huge image)**:
-                        `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
-                    *   **Photo Level (One long image per chapter)**:
-                        `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
-
-                    > ⚠️ **Best Practice - Avoiding Overwrites**: 
-                    > When processing multiple different albums (e.g., in a loop) into the same `base_dir`, ALWAYS include unique identifiers like `{Aid}` or `{Atitle}` in your `rule`. Using a static rule like `"Bd/output.pdf"` will cause subsequent albums to overwrite previous ones.
-                - `filename_rule`: Standard filename rule (used if `dir_rule` is absent).
-                - `delete_original_file`: Boolean.
+        参数:
+            album_id: 要处理的本子 ID。
+            process_type: 后处理类型，可选值为 "zip", "img2pdf", "long_img"。
+            params: 后处理参数字典。支持：
+                - `dir_rule`: 输出路径规则。格式: `{"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics"}`。
+                - `delete_original_file`: 布尔值，处理完成后是否删除原始文件。
         """
         from jmcomic import JmAlbumDetail, JmModuleConfig
 
