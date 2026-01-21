@@ -32,7 +32,7 @@
 
 以下示例基于 `cursor`/`antigravity` 和 mcp 模式
 
-| 1. 下载本子并转 PDF / ZIP | 2. 搜索【无修正】本子 | 3. 查详情 350234  | 4. 查询月度最多爱心前10本子 |
+| 1. 下载本子并转 PDF / ZIP | 2. 搜索【无修正】本子 | 3. 查详情 350234  | 4. 查询月度最多爱心前10个本子 |
 | :---: | :---: | :---: | :---: |
 | ![Download and PDF](images/sample_download_album_convert_pdf.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Month Ranking by Likes](images/sample_month_ranking_by_score.png) |
 | **5. 修改option配置** | | | |

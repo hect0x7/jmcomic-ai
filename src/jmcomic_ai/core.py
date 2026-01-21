@@ -740,6 +740,15 @@ class JmcomicService:
             params: 后处理参数字典。支持：
                 - `dir_rule`: 输出路径规则。格式: `{"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics"}`。
                 - `delete_original_file`: 布尔值，处理完成后是否删除原始文件。
+
+        返回:
+            包含以下内容的字典：
+                - status: "success" 或 "error"
+                - process_type: 后处理类型
+                - album_id: 本子 ID
+                - output_path: 输出文件/目录的绝对路径
+                - is_directory: 输出是否为目录
+                - message: 成功或错误消息
         """
         from jmcomic import JmAlbumDetail, JmModuleConfig
 

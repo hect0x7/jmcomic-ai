@@ -97,13 +97,13 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             expected = [
                 "search_album",
                 "get_album_detail",
-                "get_ranking",
-                "get_category_list",
+                "browse_albums",
                 "download_album",
                 "download_photo",
                 "download_cover",
                 "login",
                 "update_option",
+                "post_process",
             ]
 
             for name in expected:
@@ -147,23 +147,22 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(result)
             print("\n[OK] get_album_detail executed successfully")
 
-    async def test_tool_get_ranking(self):
-        """Test get_ranking tool"""
+    async def test_tool_browse_albums(self):
+        """Test browse_albums tool (replaces get_ranking and get_category_list)"""
         async with self._mcp_session() as session:
-            print("\n=== Testing get_ranking(period='day') ===")
-            result = await session.call_tool("get_ranking", {"period": "day", "page": 1})
+            # Test 1: Browse by time range (like ranking)
+            print("\n=== Testing browse_albums(time_range='day', order_by='likes') ===")
+            result = await session.call_tool("browse_albums", {"time_range": "day", "order_by": "likes", "page": 1})
             print(f"  Result: {str(result)[:200]}...")
             self.assertIsNotNone(result)
-            print("\n[OK] get_ranking executed successfully")
-
-    async def test_tool_get_category_list(self):
-        """Test get_category_list tool"""
-        async with self._mcp_session() as session:
-            print("\n=== Testing get_category_list(category='doujin') ===")
-            result = await session.call_tool("get_category_list", {"category": "doujin", "page": 1})
+            print("\n[OK] browse_albums (ranking mode) executed successfully")
+            
+            # Test 2: Browse by category
+            print("\n=== Testing browse_albums(category='doujin') ===")
+            result = await session.call_tool("browse_albums", {"category": "doujin", "page": 1})
             print(f"  Result: {str(result)[:200]}...")
             self.assertIsNotNone(result)
-            print("\n[OK] get_category_list executed successfully")
+            print("\n[OK] browse_albums (category mode) executed successfully")
 
     async def test_tool_download_cover(self):
         """Test download_cover tool"""
@@ -286,12 +285,13 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             tool_tests = [
                 ("search_album", {"keyword": TEST_SEARCH_KEYWORD, "page": 1}),
                 ("get_album_detail", {"album_id": TEST_ALBUM_ID}),
-                ("get_ranking", {"period": "day", "page": 1}),
-                ("get_category_list", {"category": "0", "page": 1}),
+                ("browse_albums", {"time_range": "day", "order_by": "likes", "page": 1}),
+                ("browse_albums", {"category": "doujin", "page": 1}),
                 ("download_cover", {"album_id": TEST_ALBUM_ID}),
                 ("download_photo", {"photo_id": TEST_ALBUM_ID}),
                 ("download_album", {"album_id": TEST_ALBUM_ID}),
                 ("update_option", {"option_updates": {"log": True}}),
+                ("post_process", {"album_id": TEST_ALBUM_ID, "process_type": "zip"}),
             ]
 
             tool_results = {}
