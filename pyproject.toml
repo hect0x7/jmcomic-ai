@@ -1,6 +1,6 @@
 [project]
 name = "jmcomic-ai"
-version = "0.0.6"
+version = "0.0.7"
 description = "AI-powered JMComic crawler with MCP server and skills management for seamless AI agent integration"
 readme = "README.md"
 license = "MIT"
