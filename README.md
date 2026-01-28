@@ -125,10 +125,10 @@ JMComic AI 提供了两个维度的能力，你可以根据需求，选择以下
 
 | 软件 (Software) | 配置文件路径 (Config File Path) |
 | :--- | :--- |
-| **Antigravity** | **Windows**: `~\.gemini\antigravity\mcp_config.json`<br>**macOS**: `~/Library/Application Support/Gemini/antigravity/mcp_config.json` |
-| **Cursor** | **Global**: `%USERPROFILE%\.cursor\mcp.json` (Win) / `~/.cursor/mcp.json` (Mac/Linux)<br>**Project**: 项目根目录下的 `.cursor/mcp.json` |
-| **Claude Code** | **User-Scoped**: `~/.claude.json` (Home)<br>**Project-Scoped**: 项目根目录下的 `.mcp.json` |
-| **Claude Desktop** | **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`<br>**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Antigravity** | **Windows**: `%USERPROFILE%/.gemini/antigravity/mcp_config.json`<br>**macOS**: `~/Library/Application Support/Gemini/antigravity/mcp_config.json` |
+| **Cursor** | **Global**: `%USERPROFILE%/.cursor/mcp.json` (Win) / `~/.cursor/mcp.json` (Mac/Linux)<br>**Project**: 项目根目录下的 `.cursor/mcp.json` |
+| **Claude Code** | **User-Scoped**: `%USERPROFILE%/.claude.json` (Win) / `~/.claude.json` (Mac/Linux)<br>**Project-Scoped**: 项目根目录下的 `.mcp.json` |
+| **Claude Desktop** | **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`<br>**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
 ---
 
