@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🚀 JMComic AI</h1>
+  <img src="images/header.png" alt="JMComic AI" width="200" />
 
   <p><i>都什么时代了还在用传统方式看本？</i></p>
   <p><i>从<code>人机交互</code> 到 <code>人智交互</code>，<b>把你的一切本子需求都扔给 AI</b>！</i></p>
