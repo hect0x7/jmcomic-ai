@@ -44,7 +44,7 @@ def parse_args():
     
     # Search-specific options
     parser.add_argument("--order-by", type=str, default="latest", help="Sort order for search (default: latest)")
-    parser.add_argument("--sort-by", type=str, default="mr", help="Sort order for category (default: mr)")
+    parser.add_argument("--sort-by", type=str, default="latest", help="Sort order for category (latest, likes, views, pictures, score, comments)")
     
     return parser.parse_args()
 
@@ -65,7 +65,7 @@ def fetch_results(service: JmcomicService, args) -> list[dict]:
             # browse_albums supports time_range & order_by
             response = service.browse_albums(time_range=args.ranking, order_by="likes", page=page)
         elif args.category:
-            response = service.browse_albums(category=args.category, page=page, order_by="latest")
+            response = service.browse_albums(category=args.category, page=page, order_by=args.sort_by)
         else:
             response = {"albums": []}
         

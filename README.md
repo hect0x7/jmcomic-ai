@@ -152,16 +152,19 @@ JMComic AI 提供了两个维度的能力，你可以根据需求，选择以下
 - 如果你是clone了源码，希望用本地源码安装，可以这样配置：
 ```json
 {
+  "mcpServers": {
+    "jmcomic-ai": {
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/your/jmcomic-ai",
+        "/path/to/your/jmcomic-ai", // 改成你的源码路径
         "run",
         "jmai",
         "mcp",
         "stdio"
       ]
     }
+  }
 }
 ```
 
