@@ -1,6 +1,6 @@
 [project]
 name = "jmcomic-ai"
-version = "0.0.7"
+version = "0.0.8"
 description = "AI-powered JMComic crawler with MCP server and skills management for seamless AI agent integration"
 readme = "README.md"
 license = "MIT"
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "jmcomic>=2.6.11",
+    "jmcomic>=2.6.12",
     "mcp",
     "typer",
     "watchdog>=6.0.0",

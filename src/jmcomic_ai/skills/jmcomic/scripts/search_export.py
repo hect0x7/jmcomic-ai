@@ -44,7 +44,7 @@ def parse_args():
     
     # Search-specific options
     parser.add_argument("--order-by", type=str, default="latest", help="Sort order for search (default: latest)")
-    parser.add_argument("--sort-by", type=str, default="mr", help="Sort order for category (default: mr)")
+    parser.add_argument("--sort-by", type=str, default="latest", help="Sort order for category (latest, likes, views, pictures, score, comments)")
     
     return parser.parse_args()
 
@@ -56,14 +56,20 @@ def fetch_results(service: JmcomicService, args) -> list[dict]:
     for page in range(args.page, args.page + args.max_pages):
         print(f"📄 Fetching page {page}...")
         
+        response = {}
         if args.keyword:
-            results = service.search_album(args.keyword, page=page, order_by=args.order_by)
+            response = service.search_album(args.keyword, page=page, order_by=args.order_by)
         elif args.ranking:
-            results = service.get_ranking(period=args.ranking, page=page)
+            # Ranking mode: e.g. day -> time_range="day", order_by="likes" (assumed ranking impl)
+            # Or use explicit ranking mapping if available. 
+            # browse_albums supports time_range & order_by
+            response = service.browse_albums(time_range=args.ranking, order_by="likes", page=page)
         elif args.category:
-            results = service.get_category_list(category=args.category, page=page, sort_by=args.sort_by)
+            response = service.browse_albums(category=args.category, page=page, order_by=args.sort_by)
         else:
-            results = []
+            response = {"albums": []}
+        
+        results = response.get("albums", [])
         
         if not results:
             print(f"⚠️ No results on page {page}, stopping.")

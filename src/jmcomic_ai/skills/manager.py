@@ -9,7 +9,7 @@ class SkillManager:
         # Assumption: this file is at src/jmcomic_ai/skills/manager.py
         # and resources are at src/jmcomic_ai/skills/jmcomic/
         self.skills_source_dir = Path(__file__).parent / "jmcomic"
-        self.skill_name = self.skills_source_dir.name
+        self.skill_name: str = self.skills_source_dir.name
 
     def _get_skill_target_dir(self, target_dir: Path) -> Path:
         return target_dir / self.skill_name

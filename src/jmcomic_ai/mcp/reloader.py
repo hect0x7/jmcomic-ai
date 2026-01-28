@@ -13,10 +13,14 @@ class RestartHandler(FileSystemEventHandler):
         self.last_restart: float = 0
 
     def on_modified(self, event: FileSystemEvent) -> None:
-        if event.src_path.endswith(".py"):
+        src_path = event.src_path
+        if isinstance(src_path, bytes):
+            src_path = src_path.decode(sys.getfilesystemencoding())
+            
+        if src_path.endswith(".py"):
             now = time.time()
             if now - self.last_restart > 1:  # 节流: 1秒内只重启一次
-                print(f"\n[*] Detected change in {event.src_path}, restarting server...", file=sys.stderr)
+                print(f"\n[*] Detected change in {src_path}, restarting server...", file=sys.stderr)
                 self.restart_callback()
                 self.last_restart = now
 
