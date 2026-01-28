@@ -157,7 +157,7 @@ JMComic AI 提供了两个维度的能力，你可以根据需求，选择以下
       "command": "uv",
       "args": [
         "--directory",
-        "/path/to/your/jmcomic-ai", // 改成你的源码路径
+        "/path/to/your/jmcomic-ai",
         "run",
         "jmai",
         "mcp",
@@ -167,6 +167,8 @@ JMComic AI 提供了两个维度的能力，你可以根据需求，选择以下
   }
 }
 ```
+
+> **注意**：请将 `/path/to/your/jmcomic-ai` 替换为您本地源码的实际绝对路径。
 
 #### 2. SSE 模式 (推荐)
 推荐用于大部分桌面端 AI 客户端。
