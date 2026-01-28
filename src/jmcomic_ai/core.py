@@ -7,7 +7,7 @@ from typing import Any
 try:
     from mcp.server.fastmcp import Context
 except ImportError:
-    Context = Any
+    Context = Any  # type: ignore
 
 from jmcomic import (
     JmAlbumDetail,
@@ -425,7 +425,7 @@ class JmcomicService:
         
         return self._parse_search_page(search_page)
 
-    async def download_album(self, album_id: str, ctx: Context = None) -> dict[str, Any]:
+    async def download_album(self, album_id: str, ctx: Context | None = None) -> dict[str, Any]:
         """
         在后台下载整个本子。
 
@@ -487,13 +487,13 @@ class JmcomicService:
                 }
                 msg = f"📚 Album Info: {json.dumps(album_dict, ensure_ascii=False)}"
                 service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send album info to ctx")
+                safe_ctx_call(lambda: ctx.info(msg), "Failed to send album info to ctx")  # type: ignore
 
             def after_album(self, album: JmAlbumDetail):
                 super().after_album(album)
                 msg = f"✅ Album download completed: {album.name}"
                 service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send album completion to ctx")
+                safe_ctx_call(lambda: ctx.info(msg), "Failed to send album completion to ctx")  # type: ignore
 
             def before_photo(self, photo: JmPhotoDetail):
                 super().before_photo(photo)
@@ -505,7 +505,7 @@ class JmcomicService:
 
                 msg = f"📖 Starting chapter: {photo.photo_id} - {photo.name} ({len(photo)} pages)"
                 service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send chapter start to ctx")
+                safe_ctx_call(lambda: ctx.info(msg), "Failed to send chapter start to ctx")  # type: ignore
 
             def after_image(self, image: JmImageDetail, img_save_path: str):
                 super().after_image(image, img_save_path)
@@ -523,7 +523,7 @@ class JmcomicService:
                 if total > 0:
                     msg = f"Chapter {photo_id}: {current}/{total}"
                     service_logger.info(msg)
-                    safe_ctx_call(lambda: ctx.info(msg), "Failed to send image progress to ctx")
+                    safe_ctx_call(lambda: ctx.info(msg), "Failed to send image progress to ctx")  # type: ignore
 
         # 3. Blocking Download Function
         def _blocking_download():
@@ -555,7 +555,7 @@ class JmcomicService:
             "error": error_msg,
         }
 
-    async def download_photo(self, photo_id: str, ctx: Context = None) -> dict[str, Any]:
+    async def download_photo(self, photo_id: str, ctx: Context | None = None) -> dict[str, Any]:
         """
         下载本子中的特定章节。
 
@@ -606,13 +606,13 @@ class JmcomicService:
                 }
                 msg = f"📖 Photo Info: {json.dumps(photo_dict, ensure_ascii=False)}"
                 service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send photo info to ctx")
+                safe_ctx_call(lambda: ctx.info(msg), "Failed to send photo info to ctx")  # type: ignore
 
             def after_photo(self, photo: JmPhotoDetail):
                 super().after_photo(photo)
                 msg = f"✅ Photo download completed: {photo.name} ({self.current} images)"
                 service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send photo completion to ctx")
+                safe_ctx_call(lambda: ctx.info(msg), "Failed to send photo completion to ctx")  # type: ignore
 
             def after_image(self, image: JmImageDetail, img_save_path: str):
                 super().after_image(image, img_save_path)
@@ -626,10 +626,10 @@ class JmcomicService:
 
                 service_logger.info(msg)
                 if ctx:
-                    safe_ctx_call(lambda: ctx.info(msg), "Failed to send download progress to ctx")
+                    safe_ctx_call(lambda: ctx.info(msg), "Failed to send download progress to ctx")  # type: ignore
                     if hasattr(ctx, 'report_progress') and self.total > 0:
                         safe_ctx_call(
-                            lambda: ctx.report_progress(self.current, self.total),
+                            lambda: ctx.report_progress(self.current, self.total),  # type: ignore
                             "Failed to report progress to ctx"
                         )
 

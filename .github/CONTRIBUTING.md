@@ -148,16 +148,35 @@ jmai mcp --help
 2. **实时日志与热重载**：
     - 使用 `tail -f` 观察项目根目录下的 `jmcomic_ai.log` 日志。
     - **热重载调试**：使用 `jmai mcp --reload` 启动服务。在该模式下，你对 `src/` 目录下代码的任何修改都会触发服务器自动重启，无需反复手动开关服务。
-3. **本地 AI 智能体/编辑器调试**：在你的客户端（如 Cursor, Antigravity, Windsurf, VS Code, Claude Desktop 等）中添加本地开发配置。
-   以 Claude Desktop 为例，在 `claude_desktop_config.json` 中配置：
+3. **本地 AI 智能体/编辑器调试**：在你的客户端（如 Claude Code, Cursor, Antigravity 等）中添加本地开发配置。
+   
+   以 **Claude Code** 为例（最推荐的调试方式），在 `~/.claude.json` (User) 或项目根目录 `.mcp.json` (Project) 中配置：
    ```json
-   "mcpServers": {
-     "jmcomic-ai-dev": {
-       "command": "uv",
-       "args": ["--directory", "D:/你的路径/jmcomic-ai", "run", "jmai", "mcp"]
+   {
+     "mcpServers": {
+       "jmcomic-ai-dev": {
+         "command": "uv",
+         "args": [
+           "--directory",
+           "/path/to/your/jmcomic-ai",
+           "run",
+           "jmai",
+           "mcp",
+           "stdio" 
+         ]
+       }
      }
    }
    ```
+   **验证方式**：修改代码后，在终端运行以下命令检查连接状态：
+   ```bash
+   claude mcp list
+   ```
+
+   **其他客户端 (Cursor/Windsurf)**：
+   推荐使用 SSE 模式进行热重载调试：
+   1. 在终端运行：`uv run jmai mcp sse --reload`
+   2. 在编辑器中配置 Server URL：`http://127.0.0.1:8000/sse`
    如果是 Cursor 或其他支持 MCP 的编辑器，通常在设置界面添加类似的 `command` 和 `args` 即可。
 
 ## 提交 Issue

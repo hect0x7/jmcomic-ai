@@ -88,3 +88,4 @@ outputs/**/*.png
 assets/downloads/**/*.png
 [0-9]*/
 temp_test_skills/
+.claude

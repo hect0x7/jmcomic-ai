@@ -63,7 +63,7 @@ def load_album_ids(args) -> list[str]:
     return []
 
 
-def fetch_album_details(service: JmcomicService, album_ids: list[str], verbose: bool = False) -> list[dict]:
+def fetch_album_details(service: JmcomicService, album_ids: list[str], verbose: bool = False) -> tuple[list[dict], list[dict]]:
     """Fetch details for multiple albums"""
     results = []
     failed = []

@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import Any, Literal, cast
 
 from mcp.server.fastmcp import FastMCP
 
@@ -47,7 +47,7 @@ def _create_tool_wrapper(method_name: str, method: Callable) -> Callable:
     wrapper.__name__ = method_name
     wrapper.__doc__ = method.__doc__
     wrapper.__annotations__ = method.__annotations__
-    wrapper.__signature__ = inspect.signature(method)
+    wrapper.__signature__ = inspect.signature(method)  # type: ignore
 
     return wrapper
 
@@ -131,7 +131,6 @@ def run_server(transport: str, service: JmcomicService, host: str = "127.0.0.1",
     if mapped_transport != "stdio":
         mcp_server.settings.host = host
         mcp_server.settings.port = port
-
+    
     # 启动服务器
-    # noinspection PyTypeChecker
-    mcp_server.run(transport=mapped_transport)
+    mcp_server.run(transport=cast(Literal["stdio", "sse", "streamable-http"], mapped_transport))

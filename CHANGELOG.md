@@ -5,7 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.0.6] - 2026-01-19
+## [0.0.8] - 2026-01-28
+
+### Documentation
+- 📚 **MCP 配置指南重构**：重写 README 和 CONTRIBUTING 文档，新增 **Claude Code** 作为首选调试工具，并完善了 Antigravity、Cursor 和 Claude Desktop 的配置参考。
+- 📖 **配置示例细化**：拆分 MCP 配置为 stdio (默认)、SSE (Cursor 推荐) 和 HTTP (远程) 三种流式模式，提供了更直观的 JSON 片段。
+
+### Fix
+- 🛡️ **类型安全增强**：修复了 `src/` 下所有的 MyPy 类型检查错误，增强了 `fastmcp` 上下文调用和 lambda 表达式的健壮性。
+- 🐛 **导入修复**：修正了 `core.py` 中 `Context` 重复导入和 `server.py` 中 `Transport` 类型断言的问题。
+
+### Changed
+- ♻️ **脚本适配**：`ranking_tracker.py`、`search_export.py` 等技能脚本现在统一使用新的 `browse_albums` API，逻辑更收敛。
+- ⚙️ **开发工作流**：新增 `.github/workflows/mypy.yml`，在 CI 中强制进行严格的静态类型检查。
+
+## [0.0.7] - 2026-01-19
 
 ### Changed
 - 🔄 **工具输出结构化**：`download_album` 与 `post_process` 现在返回结构化的字典（包含 `status`, `download_path` 等字段）而非纯文本，以提升 AI 代理的自动化处理与验证能力。

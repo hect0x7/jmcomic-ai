@@ -53,7 +53,11 @@ def fetch_ranking(service: JmcomicService, period: str, max_pages: int) -> list[
         print(f"  📄 Fetching {period} ranking page {page}...")
         
         try:
-            results = service.get_ranking(period=period, page=page)
+            # Use unified browse_albums API
+            # For ranking, we usually use order_by="likes" (or "views") combined with time_range
+            response = service.browse_albums(time_range=period, order_by="likes", page=page)
+            results = response.get("albums", [])
+            
             if not results:
                 print(f"  ⚠️ No results on page {page}, stopping.")
                 break

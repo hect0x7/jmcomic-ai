@@ -118,43 +118,96 @@ JMComic AI 提供了两个维度的能力，你可以根据需求，选择以下
 ### 🔌 模块 A：接入 MCP 工具 (推荐)
 
 **功能**：为 AI 安装“手脚”，使其能够直接调用 `search`, `download` 等核心功能。
-**适用场景**：你希望在 AI 客户端（如 Cursor, Antigravity, Claude 等）中直接下载漫画，无需打开终端。
+**适用场景**：你希望在 AI 客户端中直接下漫画，无需打开终端。
 
-**配置方法:**
+#### 📂 客户端配置文件位置指南
+在开始配置前，请先找到你的 AI 客户端使用的配置文件。
 
-不同的本地 AI 客户端配置方式略有不同。MCP 支持两种连接模式：**推荐使用 SSE/HTTP 模式**以获得最佳性能，或使用传统的 **stdio 模式**。
+| 软件 (Software) | 配置文件路径 (Config File Path) |
+| :--- | :--- |
+| **Antigravity** | **Windows**: `~\.gemini\antigravity\mcp_config.json`<br>**macOS**: `~/Library/Application Support/Gemini/antigravity/mcp_config.json` |
+| **Cursor** | **Global**: `%USERPROFILE%\.cursor\mcp.json` (Win) / `~/.cursor/mcp.json` (Mac/Linux)<br>**Project**: 项目根目录下的 `.cursor/mcp.json` |
+| **Claude Code** | **User-Scoped**: `~/.claude.json` (Home)<br>**Project-Scoped**: 项目根目录下的 `.mcp.json` |
+| **Claude Desktop** | **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`<br>**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
-#### 1. 启动服务端 (SSE/HTTP 模式 - 推荐)
-在终端运行以下命令开启服务：
-```bash
-jmai mcp          # 默认开启 SSE 服务，端口 8000
-jmai mcp --reload # 开启热重载模式（推荐开发/调试使用）
+---
+
+根据你的需求，选择以下其中一种传输协议（Transport）进行配置：
+
+#### 1. stdio 模式 (最简单)
+最简单的配置方式，AI 客户端会自动在后台启动并管理 `jmai` 进程。
+
+- **配置内容**:
+```json
+{
+  "mcpServers": {
+    "jmcomic-ai": {
+      "command": "jmai",
+      "args": ["mcp", "stdio"]
+    }
+  }
+}
 ```
 
-#### 2. 在客户端中配置
-在你的 AI 客户端（如 Cursor 设置、Windsurf 配置或 Claude 配置文件）中添加以下内容：
+- 如果你是clone了源码，希望用本地源码安装，可以这样配置：
+```json
+{
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/your/jmcomic-ai",
+        "run",
+        "jmai",
+        "mcp",
+        "stdio"
+      ]
+    }
+}
+```
 
-- **以 URL 方式连接 (推荐)**:
-  ```json
-  "jmcomic-ai": {
-    "url": "http://127.0.0.1:8000/sse"
-  }
+#### 2. SSE 模式 (推荐)
+推荐用于大部分桌面端 AI 客户端。
+
+- **第一步：启动服务**
+  ```bash
+  jmai mcp sse  # 默认端口 8000
   ```
-- **以子进程方式连接 (stdio)**:
-  ```json
-  "jmcomic-ai": {
-    "command": "jmai",
-    "args": ["mcp", "stdio"]
+- **第二步：配置客户端**
+```json
+{
+  "mcpServers": {
+    "jmcomic-ai": {
+      "url": "http://127.0.0.1:8000/sse"
+    }
   }
+}
+```
+
+#### 3. HTTP 流式模式 (生产/远程)
+适用于远程部署或对性能有更高要求的场景。
+
+- **第一步：启动服务**
+  ```bash
+  jmai mcp http
   ```
+- **第二步：配置客户端**
+```json
+{
+  "mcpServers": {
+    "jmcomic-ai": {
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
 
-> 💡 **常见客户端配置文件路径参考**:
-> - **Claude Desktop (Windows)**: `%APPDATA%\Claude\claude_desktop_config.json`
-> - **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-> - **Cursor / Windsurf**: 通常在首选项 (Preferences) -> MCP 设置界面中直接图形化添加。
-
-4.  配置完成后重启你的 AI 客户端，你会在工具栏或界面中看到 🔨 图标，表示 MCP 服务已成功加载。
-
+4.  配置完成后：
+    *   **通用客户端**：重启客户端，检查状态指示灯或工具栏（通常显示为 🔨 图标）。
+    *   **Claude Code**：在终端运行以下命令以验证连接：
+        ```bash
+        claude mcp list
+        ```
+        如果看到 `jmcomic-ai` (connected)，说明配置成功。
 
 ---
 
@@ -162,6 +215,7 @@ jmai mcp --reload # 开启热重载模式（推荐开发/调试使用）
 
 
 **功能**：为 AI 注入作者总结的“老司机经验”（如：如何处理 403 错误，如何避免重复下载）。
+
 **适用场景**：你希望 AI 不仅仅是执行命令，还能像真人一样思考和规划任务（*配合模块 A 使用效果最佳*）。
 
 **配置方法:**
