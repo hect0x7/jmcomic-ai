@@ -11,9 +11,20 @@ def main():
     parser.add_argument("--delete", action="store_true", help="Delete original files after processing")
     parser.add_argument("--password", help="Password for encryption (Zip/PDF)")
     parser.add_argument("--outdir", help="Output directory")
+    parser.add_argument("--dir-rule", help="Output DSL rule, e.g. 'Bd/{Atitle}/{Pindex}.zip'")
+    parser.add_argument("--base-dir", help="Base directory used with --dir-rule")
     parser.add_argument("--level", choices=["album", "photo"], default="photo", help="Processing level (default: photo)")
 
     args = parser.parse_args()
+
+    if args.outdir and (args.dir_rule or args.base_dir):
+        parser.error("--outdir cannot be used with --dir-rule/--base-dir")
+
+    if args.dir_rule and not args.base_dir:
+        parser.error("--base-dir is required when using --dir-rule")
+
+    if args.base_dir and not args.dir_rule:
+        parser.error("--dir-rule is required when using --base-dir")
 
     service = JmcomicService(args.option)
 
@@ -25,7 +36,9 @@ def main():
             parser.error("--password is only supported for zip or img2pdf")
         params["encrypt"] = {"password": args.password}
     
-    if args.outdir:
+    if args.dir_rule and args.base_dir:
+        params["dir_rule"] = {"rule": args.dir_rule, "base_dir": args.base_dir}
+    elif args.outdir:
         params["dir_rule"] = {"rule": "Bd", "base_dir": args.outdir}
 
     result = service.post_process(args.id, args.type, params)

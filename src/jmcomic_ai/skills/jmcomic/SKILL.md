@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.8"
+  version: "0.0.9"
   dependencies: python>=3.10
 ---
 
@@ -418,6 +418,9 @@ python scripts/post_process.py --id 123456 --type zip --password "my_secret" --d
 
 # Merge images into a long scroll image
 python scripts/post_process.py --id 123456 --type long_img --outdir ./long_images
+
+# Use native dir_rule DSL (recommended for precise output paths)
+python scripts/post_process.py --id 123456 --type zip --dir-rule "Bd/{Atitle}/{Pindex}.zip" --base-dir "D:/Comics/Exports"
 ```
 
 **Features**:
@@ -425,6 +428,27 @@ python scripts/post_process.py --id 123456 --type long_img --outdir ./long_image
 - ✅ Option to encrypt output (Zip/PDF)
 - ✅ Automatic cleanup of original files
 - ✅ Custom output directories
+
+## Script Parameters ↔ MCP Tools Mapping
+
+The following table clarifies how script CLI parameters map to MCP tools.
+
+| Script | Target Tool | Mapping Level | Notes |
+| :--- | :--- | :--- | :--- |
+| `search_export.py` | `search_album` / `browse_albums` | Partial | `--keyword` maps to `search_album`; `--ranking` / `--category` maps to `browse_albums`. Ranking is a convenience mode based on `time_range` + configurable sort, not a separate backend API. |
+| `post_process.py` | `post_process` | High | `--id`→`album_id`, `--type`→`process_type`, optional flags to `params`. `--dir-rule` + `--base-dir` map to `params.dir_rule`. |
+| `album_info.py` | `get_album_detail` | Partial | Batch wrapper over repeated single-album calls; output format is script-defined. |
+| `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
+| `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
+| `batch_download.py` | (non-MCP direct download flow) | None | Designed for installable skill runtime; does not guarantee MCP tool return shape/progress contract. |
+| `download_photo.py` | `download_photo` (conceptual) | Partial | Script behavior focuses on batch orchestration and CLI outputs. |
+| `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
+
+### Mapping Policy
+
+- **MCP tools are the source of truth** for agent-facing contracts (name, args, return structure).
+- **Scripts are operational helpers** for local/installed skill workflows and may expose different output formatting.
+- If strict schema guarantees are required, prefer calling MCP tools directly instead of scripts.
 
 ## Important Notes
 
