@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.0.9] - 2026-03-13
+
+### Changed
+- 🧩 **Skills 后处理参数增强**：`scripts/post_process.py` 新增 `--dir-rule` 与 `--base-dir` 参数，支持以 `dir_rule` DSL 精确控制输出路径；并增加与 `--outdir` 的互斥与配对校验，避免参数冲突。
+- 📚 **Skills 契约文档补充**：`SKILL.md` 新增“Script Parameters ↔ MCP Tools Mapping”映射说明，明确脚本参数与 MCP 工具契约的对齐级别与边界。
+
 ## [0.0.8] - 2026-01-28
 
 ### Documentation
