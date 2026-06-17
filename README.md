@@ -17,7 +17,7 @@
 
 **JMComic AI** 是为 [JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python) 提供的 **MCP (Model Context Protocol) 支持** 和 **AI Skills 增强**。
 
-![项目介绍](images/introduction.png)
+![项目介绍](https://raw.githubusercontent.com/hect0x7/hect0x7/master/images/jmcomic-intro-main.png)
 
 传统的爬虫工具虽然高效，但在处理模糊需求时往往力不从心。你必须记住精确的 ID 或关键字，还要手动配置各种参数。
 
