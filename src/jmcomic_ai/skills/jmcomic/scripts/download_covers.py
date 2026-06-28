@@ -59,6 +59,11 @@ def load_album_ids(args) -> list[str]:
 
 def download_covers(service: JmcomicService, album_ids: list[str], output_dir: Path) -> tuple[int, list[str]]:
     """Download covers for multiple albums"""
+    if output_dir.name != "covers":
+        raise ValueError(
+            "The current service contract writes to <base_dir>/covers, so --output must point to a directory named 'covers'."
+        )
+
     # 服务方法 download_cover() 固定写入 <base_dir>/covers/。
     # CLI 的 --output 即为目标 covers 目录，因此把 base_dir 临时指向其父目录，
     # 让服务自身决定 covers 子目录（不重写下载逻辑，仍委托 service.download_cover）。

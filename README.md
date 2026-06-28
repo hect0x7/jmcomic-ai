@@ -107,7 +107,7 @@ pip install jmcomic-ai
 ```bash
 # 克隆项目
 git clone https://github.com/hect0x7/jmcomic-ai.git
-cd JMComic-ai
+cd jmcomic-ai
 
 # 同步依赖环境
 uv sync
@@ -174,7 +174,7 @@ graph TB
 
 Skills 是一套结构化的知识文件包，让 AI 拥有"老司机经验"：
 
-```
+```text
 skills/jmcomic/
 ├── 📄 SKILL.md                     # 主技能手册（工具用法 + 返回值结构 + 配置范例）
 ├── 📂 assets/

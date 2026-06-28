@@ -44,7 +44,7 @@ python scripts/batch_download.py --ids 123456,789012 --option /path/to/option.ym
 ```
 
 **Features**:
-- ✅ Download multiple albums in sequence
+- ✅ Download multiple albums concurrently
 - ✅ Progress tracking with success/failure counts
 - ✅ Error handling and summary report
 

@@ -35,4 +35,4 @@ The `dir_rule` parameter takes a dictionary: `{"rule": "DSL_STRING", "base_dir":
 > ⚠️ **Best Practice - Avoiding Overwrites**:
 > When processing multiple different albums (e.g., in a loop) into the same `base_dir`, ALWAYS include unique identifiers like `{Aid}` or `{Atitle}` in your `rule`. Using a static rule like `"Bd/output.pdf"` will cause subsequent albums to overwrite previous ones.
 
-**Workflow Suggestion**: Use `download_album` first to ensure source images exist, then call `post_process`. The tool returns the **actual predicted path** of the result.
+**Workflow Suggestion**: Use `download_album` first to ensure source images exist, then call `post_process`. The tool returns the **predicted output path** of the result.

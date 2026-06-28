@@ -58,7 +58,12 @@ def load_album_ids(args) -> list[str]:
             sys.exit(1)
 
         with open(file_path, encoding="utf-8") as f:
-            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+            album_ids = []
+            for line in f:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    album_ids.append(stripped)
+            return album_ids
 
     return []
 

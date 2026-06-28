@@ -63,8 +63,9 @@ def fetch_ranking(service: JmcomicService, period: str, max_pages: int) -> list[
                 break
 
             # Add ranking position
-            for i, result in enumerate(results):
-                result["rank"] = (page - 1) * len(results) + i + 1
+            start_rank = len(all_results) + 1
+            for offset, result in enumerate(results, start=start_rank):
+                result["rank"] = offset
                 result["period"] = period
 
             all_results.extend(results)

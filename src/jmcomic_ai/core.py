@@ -64,7 +64,13 @@ class _McpDownloaderBase(JmDownloader):  # type: ignore[misc, valid-type]
         """安全地调用 MCP Context 异步方法，防止进度报告失败中止下载"""
         if self.ctx:
             try:
-                asyncio.run_coroutine_threadsafe(coro_func(), self.loop)
+                future = asyncio.run_coroutine_threadsafe(coro_func(), self.loop)
+                def _on_done(f: Any) -> None:
+                    try:
+                        f.result()
+                    except Exception as e:
+                        self.service_logger.warning(f"{error_msg_prefix}: {e}")
+                future.add_done_callback(_on_done)
             except Exception as e:
                 self.service_logger.warning(f"{error_msg_prefix}: {e}")
 
@@ -129,6 +135,7 @@ class McpPhotoProgressDownloader(_McpDownloaderBase):
         super().__init__(option, ctx, loop, service_logger, threading_mod)
         self.current = 0
         self.total = 0
+        self.lock = self.threading_mod.Lock()
 
     def before_photo(self, photo: Any) -> None:
         super().before_photo(photo)
@@ -151,13 +158,16 @@ class McpPhotoProgressDownloader(_McpDownloaderBase):
 
     def after_image(self, image: Any, img_save_path: str) -> None:
         super().after_image(image, img_save_path)
-        self.current += 1
+        with self.lock:
+            self.current += 1
+            current = self.current
+            total = self.total
 
-        if self.total > 0:
-            percentage = int((self.current / self.total) * 100)
-            msg = f"Downloading: {percentage}% ({self.current}/{self.total})"
+        if total > 0:
+            percentage = int((current / total) * 100)
+            msg = f"Downloading: {percentage}% ({current}/{total})"
         else:
-            msg = f"Downloading: {self.current} images downloaded"
+            msg = f"Downloading: {current} images downloaded"
 
         self.service_logger.info(msg)
         if self.ctx:
