@@ -47,7 +47,7 @@ def parse_args():
 
 def fetch_ranking(service: JmcomicService, period: str, max_pages: int) -> list[dict]:
     """Fetch ranking for a specific period"""
-    all_results = []
+    all_results: list[dict] = []
 
     for page in range(1, max_pages + 1):
         print(f"  📄 Fetching {period} ranking page {page}...")
