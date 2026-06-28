@@ -242,18 +242,6 @@ skills/jmcomic/
 | `jmcomic://option/reference` | 配置参考文档 |
 | `jmcomic://skill` | 技能手册 (SKILL.md) |
 
-### 🖥️ 兼容客户端
-
-| 客户端 | MCP 工具 | Skills 自动发现 | 推荐传输 |
-|:---|:---:|:---:|:---|
-| **Cursor** | ✅ | ❌ 需手动粘贴 | SSE |
-| **Antigravity** | ✅ | ❌ 需手动粘贴 | stdio |
-| **Claude Code** | ✅ | ✅ | stdio |
-| **Claude Desktop** | ✅ | ✅ | SSE |
-| **Windsurf** | ✅ | ❌ 需手动粘贴 | SSE |
-| **Zed** | ✅ | ❌ 需手动粘贴 | stdio |
-
-
 ## 🚀 使用指南 (Usage)
 
 JMComic AI 提供了两条独立路线，**选择其中一条**即可：
@@ -272,8 +260,8 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     ```
 2.  技能文件将默认安装到 `~/.claude/skills/jmcomic`。
 3.  **使用**：
-    - **支持 Agent Skills 的客户端（如 Claude Code / Claude Desktop）**：安装后会自动发现并按需加载，**无需手动复制**，直接开聊即可。
-    - **不支持 Agent Skills 的客户端（如 Cursor / Antigravity 等）**：需将 `SKILL.md` 内容手动粘贴到 System Prompt 或 Project Rules 中。
+    - **支持 Agent Skills 的客户端**：安装后会自动发现并按需加载，**无需手动复制**，直接开聊即可。
+    - **不支持 Agent Skills 的客户端**：需将 `SKILL.md` 内容手动粘贴到 System Prompt 或 Project Rules 中。
 
 ---
 
