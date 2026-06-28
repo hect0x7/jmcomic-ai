@@ -1,6 +1,5 @@
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -30,7 +29,7 @@ app = typer.Typer(
 
 @app.callback()
 def main(
-        version: Optional[bool] = typer.Option(
+        version: bool | None = typer.Option(
             None,
             "--version",
             "-v",
@@ -139,7 +138,7 @@ def install_skills(
         # Default to ~/.claude/skills (Standard for Claude Desktop)
         target_dir = Path.home() / ".claude" / "skills"
         typer.secho(f"[*] Path not specified, using default: {target_dir}", fg=typer.colors.CYAN)
-        typer.secho(f"[*] Hint: Use 'jmai skills install <PATH>' to install to a specific location", fg=typer.colors.CYAN)
+        typer.secho("[*] Hint: Use 'jmai skills install <PATH>' to install to a specific location", fg=typer.colors.CYAN)
     else:
         target_dir = target_dir.resolve()
         typer.echo(f"[*] Target parent directory: {target_dir}")
@@ -214,7 +213,7 @@ def uninstall_skills(
         return
 
     typer.secho("\n[ Uninstallation Preview ]", fg=typer.colors.BRIGHT_RED, bold=True)
-    typer.secho(f"THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:", fg=typer.colors.RED)
+    typer.secho("THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:", fg=typer.colors.RED)
     typer.echo(f"Path: {preview['skill_target_dir']}")
     typer.echo("File Tree:")
     for f in preview['files']:
@@ -224,12 +223,12 @@ def uninstall_skills(
     typer.echo("")
 
     # 2. Confirmation
-    if yes or typer.confirm(f"Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?", default=False):
+    if yes or typer.confirm("Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?", default=False):
         if manager.uninstall(target_dir):
             typer.echo("Skills uninstalled successfully.")
         else:
             # This case is usually handled by the 'exists' check above, but as a fallback:
-            typer.secho(f"[*] Skipped: No skill directory found.", fg=typer.colors.YELLOW)
+            typer.secho("[*] Skipped: No skill directory found.", fg=typer.colors.YELLOW)
 
 
 # Option group

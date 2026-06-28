@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -44,62 +45,71 @@ def load_album_ids(args) -> list[str]:
     """Load album IDs from command line or file"""
     if args.ids:
         return [aid.strip() for aid in args.ids.split(",") if aid.strip()]
-    
+
     if args.file:
         file_path = Path(args.file)
         if not file_path.exists():
             print(f"❌ Error: File not found: {file_path}")
             sys.exit(1)
-        
-        with open(file_path, "r", encoding="utf-8") as f:
+
+        with open(file_path, encoding="utf-8") as f:
             return [line.strip() for line in f if line.strip() and not line.startswith("#")]
-    
+
     return []
 
 
-def main():
+async def main():
     args = parse_args()
     album_ids = load_album_ids(args)
-    
+
     if not album_ids:
         print("❌ Error: No album IDs provided")
         sys.exit(1)
-    
-    print(f"📦 Batch Download Tool")
+
+    print("📦 Batch Download Tool")
     print(f"{'='*50}")
     print(f"Total albums to download: {len(album_ids)}")
     print(f"{'='*50}\n")
-    
+
     # Initialize service
     service = JmcomicService(option_path=args.option)
-    
+
     # Download each album
     success_count = 0
     failed_ids = []
-    
+
+    print("Queuing downloads...")
+    tasks = []
     for i, album_id in enumerate(album_ids, 1):
-        print(f"[{i}/{len(album_ids)}] Downloading album {album_id}...")
-        try:
-            service.option.download_album(album_id)
-            print(f"✅ Successfully downloaded album {album_id}")
-            success_count += 1
-        except Exception as e:
-            print(f"❌ Failed to download album {album_id}: {e}")
+        tasks.append(service.download_album(album_id))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for i, (album_id, result) in enumerate(zip(album_ids, results), 1):
+        if isinstance(result, Exception):
+            print(f"❌ Failed to download album {album_id}: {result}")
             failed_ids.append(album_id)
-    
+        elif result.get("status") == "success":
+            print(f"✅ Successfully downloaded album {album_id} ({result.get('title')})")
+            print(f"   📂 {result.get('download_path')}")
+            success_count += 1
+        else:
+            print(f"❌ Failed to download album {album_id}: {result.get('error')}")
+            failed_ids.append(album_id)
+
     # Summary
     print(f"\n{'='*50}")
-    print(f"📊 Download Summary:")
+    print("📊 Download Summary:")
     print(f"✅ Successful: {success_count}/{len(album_ids)}")
     print(f"❌ Failed: {len(failed_ids)}/{len(album_ids)}")
-    
+
     if failed_ids:
-        print(f"\nFailed album IDs:")
+        print("\nFailed album IDs:")
         for aid in failed_ids:
             print(f"  - {aid}")
-    
+
     print(f"{'='*50}")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

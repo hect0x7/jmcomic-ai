@@ -1,6 +1,11 @@
 import argparse
+import sys
 
-from jmcomic_ai.core import JmcomicService
+try:
+    from jmcomic_ai.core import JmcomicService
+except ImportError:
+    print("❌ Error: jmcomic_ai not found. Please ensure the package is installed.")
+    sys.exit(1)
 
 
 def main():
@@ -35,7 +40,7 @@ def main():
         if args.type == "long_img":
             parser.error("--password is only supported for zip or img2pdf")
         params["encrypt"] = {"password": args.password}
-    
+
     if args.dir_rule and args.base_dir:
         params["dir_rule"] = {"rule": args.dir_rule, "base_dir": args.base_dir}
     elif args.outdir:

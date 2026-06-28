@@ -1,11 +1,12 @@
-import os
-import sys
 import subprocess
+import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
+
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
+
 
 class RestartHandler(FileSystemEventHandler):
     def __init__(self, restart_callback: Callable[[], None]) -> None:
@@ -16,7 +17,7 @@ class RestartHandler(FileSystemEventHandler):
         src_path = event.src_path
         if isinstance(src_path, bytes):
             src_path = src_path.decode(sys.getfilesystemencoding())
-            
+
         if src_path.endswith(".py"):
             now = time.time()
             if now - self.last_restart > 1:  # 节流: 1秒内只重启一次
@@ -40,13 +41,13 @@ def run_with_reloader(watch_path: Path) -> None:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
-        
+
         # 构造重启动命令: 剔除 --reload 后的当前命令
         args = [sys.executable, "-m", "jmcomic_ai.cli"]
         # 获取除了 --reload 之外的所有参数
         original_args = sys.argv[1:]
         filtered_args = [arg for arg in original_args if arg != "--reload"]
-        
+
         # 确保不再次进入 reload 逻辑
         cmd = args + filtered_args
         process = subprocess.Popen(cmd)
