@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.0.10] - 2026-06-28
+
+### Changed
+- ♻️ **工具词汇统一**：`search_album` 与 `browse_albums` 现共用同一套友好 `order_by` / `time_range` 词汇（`latest/likes/views/pictures/score/comments`、`all/day/today/week/month`），并提取为模块级共享映射，消除两处重复。
+- ♻️ **进度 Downloader 去重与重构**：`download_album` / `download_photo` 内嵌的两个进度 downloader 抽成共享工厂 `_build_progress_downloaders`，并将生成的动态类提取至模块级别，消除了动态创建类的反模式，降低内存开销并优化堆栈追踪。
+- ♻️ **脚本收敛单一数据源**：`scripts/` 下脚本统一改为转调 `JmcomicService` 业务方法（不再绕过到 `service.option` 或重写逻辑），与 MCP 工具契约对齐。
+- 📚 **SKILL.md 渐进式披露瘦身**：SKILL.md 由 464 行精简到 ~200 行，`dir_rule` 范例、`browse_albums` 细节、脚本完整用法迁移至 `references/{post_process,browse_albums,scripts}.md`，信息不丢。
+
+### Fixed
+- 🐛 **`download_photo.py` 幽灵下载**：脚本调用 async 的 `service.download_photo` 时缺少 `asyncio.run`，导致返回未 await 的协程、从不真正下载却恒报成功；现已修复。
+- 🐛 **`search_album` 排序透传**：旧版把 `order_by`/`time_range` 字符串原样透传给底层 `client.search`，未映射成 magic constants（默认 `"latest"` 实际未生效）；现已正确映射。
+- 📝 **README 使用说明语病**：模块 B 把「支持 Agent Skills 自动发现」「手动粘贴 System Prompt」「MCP Resource 查阅」三种独立方式混为一谈，易误导用户，现拆分澄清。
+
+### Removed
+- 🗑️ **伪字段 `category`**：`get_album_detail` 返回中恒为 `"0"` 的 `category` 字段已删除（`JmAlbumDetail` 本无此字段）。
+
+### Added
+- 🧪 **单元测试**：新增 `tests/test_core.py`，对共享 `order_by` / `time_range` 映射做无网络依赖的校验。
+
 ## [0.0.9] - 2026-03-13
 
 ### Changed

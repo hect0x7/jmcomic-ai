@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.9"
+  version: "0.0.10"
   dependencies: python>=3.10
 ---
 
@@ -73,40 +73,11 @@ This skill supports advanced post-processing of downloaded manga. It returns str
 
 **All fields are always present**. On error, `output_path` will be an empty string and `is_directory` will be `False`.
 
-**Output Control**: Use `dir_rule` for custom output paths. If omitted, files are saved in the configured default directory.
+**Output Control**: Use `dir_rule` (a `{"rule": "DSL_STRING", "base_dir": "BASE_PATH"}` dict) for custom output paths. If omitted, files are saved in the configured default directory. The DSL supports `Bd` (base_dir), `Axxx`/`Pxxx` album/photo attributes, and `{attr}` Python format placeholders. When looping over albums into one `base_dir`, include `{Aid}` or `{Atitle}` to avoid overwrites.
 
-### 🧩 Post-Process `dir_rule` Examples
+For the full set of ZIP/PDF/LongImg × album/photo `dir_rule` examples, see `references/post_process.md`.
 
-The `dir_rule` parameter takes a dictionary: `{"rule": "DSL_STRING", "base_dir": "BASE_PATH"}`. 
-- **`Bd`**: Refers to `base_dir`.
-- **`Axxx`**: Album attributes (e.g., `Aid`, `Atitle`, `Aauthor`).
-- **`Pxxx`**: Photo/Chapter attributes (e.g., `Pid`, `Ptitle`, `Pindex`).
-- **`{attr}`**: Python string format support for any metadata attribute.
-
-#### 1. ZIP Compression (`process_type="zip"`)
-*   **Album Level (Single ZIP for entire manga)**:
-    `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics/Archives"}}`
-*   **Photo Level (Individual ZIP for each chapter)**:
-    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
-
-#### 2. PDF Conversion (`process_type="img2pdf"`)
-*   **Album Level (One PDF for all chapters combined)**:
-    `{"level": "album", "dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
-*   **Photo Level (One PDF per chapter)**:
-    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
-
-#### 3. Long Image Merging (`process_type="long_img"`)
-*   **Album Level (All pages combined into one huge image)**:
-    `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
-*   **Photo Level (One long image per chapter)**:
-    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
-
-> ⚠️ **Best Practice - Avoiding Overwrites**: 
-> When processing multiple different albums (e.g., in a loop) into the same `base_dir`, ALWAYS include unique identifiers like `{Aid}` or `{Atitle}` in your `rule`. Using a static rule like `"Bd/output.pdf"` will cause subsequent albums to overwrite previous ones.
-
-**Workflow Suggestion**: Use `download_album` first to ensure source images exist, then call `post_process`. The tool returns the **actual predicted path** of the result.
- 
-This skill provides command-line utilities for JMComic operations. All tools are Python scripts located in the `scripts/` directory and should be executed using Python.
+This skill provides command-line utilities for JMComic operations. All utilities are Python scripts located in the `scripts/` directory and should be executed using Python.
  
 ### Data Structure Notes
 
@@ -123,66 +94,9 @@ Most search and browsing tools (e.g., `search_album`, `browse_albums`) return a 
 
 #### Important: Browse Albums Data Limitations
 
-**`browse_albums`** is the unified tool for browsing albums by category, time range, and sorting criteria. It combines the functionality of ranking and category browsing into a single, flexible interface.
+**`browse_albums`** is the unified tool for browsing albums by `category`, `time_range`, and `order_by` (ranking + category browsing in one interface). Its response is lightweight — each album has only `id`, `title`, `tags`, and `cover_url`, and **no** stats (likes/views/author). To get those, call **`get_album_detail(album_id)`** per album.
 
-The response **does NOT include detailed statistical data** (likes, views, author, etc.). Each album in the list contains only:
-- `id`: Album ID
-- `title`: Album title
-- `tags`: Tag list
-- `cover_url`: Cover image URL
-
-To get detailed information including likes/views/author for albums, you must call **`get_album_detail(album_id)`** for each album individually.
-
-**Supported Sorting Options (`order_by`):**
-- `latest`: Latest updates (default)
-- `likes`: Most liked
-- `views`: Most viewed
-- `pictures`: Most pictures
-- `score`: Highest rated
-- `comments`: Most comments
-
-**Common Use Cases:**
-
-1. **Rankings (day/week/month)**: Set `time_range` + `order_by`
-   ```python
-   # Monthly top liked albums
-   browse_albums(time_range="month", order_by="likes")
-   
-   # Weekly most viewed albums
-   browse_albums(time_range="week", order_by="views")
-   
-   # Today's trending albums
-   browse_albums(time_range="today", order_by="views")
-   ```
-
-2. **Category Browsing**: Set `category` + `order_by`
-   ```python
-   # Browse doujin manga (latest)
-   browse_albums(category="doujin", order_by="latest")
-   
-   # Browse Korean comics (latest)
-   browse_albums(category="hanman", order_by="latest")
-   ```
-
-3. **Combined Queries**: Set `category` + `time_range` + `order_by`
-   ```python
-   # This month's hottest doujin manga
-   browse_albums(category="doujin", time_range="month", order_by="views")
-   
-   # This week's most liked Korean comics
-   browse_albums(category="hanman", time_range="week", order_by="likes")
-   ```
-
-**Example workflow for getting top 10 albums with details:**
-```python
-# 1. Get ranking list (sorted by likes, but no likes data in response)
-ranking = browse_albums(time_range="month", order_by="likes", page=1)
-
-# 2. Get detailed info for top 10
-for album in ranking["albums"][:10]:
-    detail = get_album_detail(album["id"])
-    # Now you have: detail["likes"], detail["views"], detail["author"], etc.
-```
+`order_by` accepts: `latest` (default), `likes`, `views`, `pictures`, `score`, `comments`. For the full enumeration, use-case recipes (rankings, category browsing, combined queries), and the "top 10 with details" workflow, see `references/browse_albums.md`.
 
 
 ## Configuration Reference
@@ -239,195 +153,19 @@ plugins:
 
 ## Available Command-Line Tools
 
-The `scripts/` directory provides utility tools for common tasks. All tools support the `--help` flag for detailed usage information.
+The `scripts/` directory provides utility tools for common tasks. All tools support the `--help` flag for detailed usage. The table below summarizes each script; for full per-script examples and feature lists, see `references/scripts.md`.
 
-### 🏥 `doctor.py` - Environment Diagnostics
-
-Comprehensive diagnostic tool that checks your entire setup:
-
-```bash
-python scripts/doctor.py
-```
-
-**What it checks**:
-- ✅ Python version compatibility
-- ✅ Required dependencies (jmcomic, jmcomic_ai)
-- ✅ Configuration file status
-- ✅ Network connectivity (discovers and tests available JMComic domains)
-
-**Use this when**:
-- Setting up the skill for the first time
-- Troubleshooting any issues
-- Verifying your environment is ready
-
-### 📦 `batch_download.py` - Batch Album Downloads
-
-Download multiple albums from a list of IDs:
-
-```bash
-# From command line
-python scripts/batch_download.py --ids 123456,789012,345678
-
-# From file (one ID per line)
-python scripts/batch_download.py --file album_ids.txt
-
-# With custom config
-python scripts/batch_download.py --ids 123456,789012 --option /path/to/option.yml
-```
-
-**Features**:
-- ✅ Download multiple albums in sequence
-- ✅ Progress tracking with success/failure counts
-- ✅ Error handling and summary report
-
-### 📷 `download_photo.py` - Batch Chapter Downloads
-
-Download specific chapters/photos from albums:
-
-```bash
-# Download specific chapters
-python scripts/download_photo.py --ids 123456,789012,345678
-
-# Download chapters from file
-python scripts/download_photo.py --file photo_ids.txt
-
-# With custom config
-python scripts/download_photo.py --ids 123456,789012 --option /path/to/option.yml
-```
-
-**Features**:
-- ✅ Download specific chapters without downloading entire albums
-- ✅ Useful for selective chapter downloads
-- ✅ Progress tracking and error handling
-
-### ✅ `validate_config.py` - Configuration Validation
-
-Validate and convert configuration files:
-
-```bash
-# Validate configuration
-python scripts/validate_config.py ~/.jmcomic/option.yml
-
-# Convert YAML to JSON
-python scripts/validate_config.py option.yml --convert-to-json
-
-# Specify output path
-python scripts/validate_config.py option.yml --convert-to-json --output config.json
-```
-
-**Features**:
-- ✅ Validate option.yml syntax and structure
-- ✅ Display configuration summary (client, download, directory, proxy settings)
-- ✅ Convert between YAML and JSON formats
-
-### 🔍 `search_export.py` - Search and Export
-
-Search albums and export results to CSV or JSON:
-
-```bash
-# Search by keyword
-python scripts/search_export.py --keyword "搜索词" --output results.csv
-
-# Get daily ranking
-python scripts/search_export.py --ranking day --output ranking.json
-
-# Browse category
-python scripts/search_export.py --category doujin --output doujin.csv --max-pages 3
-```
-
-**Features**:
-- ✅ Search by keyword, ranking, or category
-- ✅ Multi-page support with `--max-pages`
-- ✅ Export to CSV or JSON format
-- ✅ Useful for building album catalogs and collections
-
-### 📖 `album_info.py` - Album Information Query
-
-Fetch detailed information for one or multiple albums:
-
-```bash
-# Single album (print to console)
-python scripts/album_info.py --id 123456
-
-# Multiple albums (export to JSON)
-python scripts/album_info.py --ids 123456,789012,345678 --output details.json
-
-# From file
-python scripts/album_info.py --file album_ids.txt --output album_details.json --verbose
-```
-
-**Features**:
-- ✅ Query single or multiple albums
-- ✅ Display detailed metadata (title, author, likes, views, chapters, tags, description)
-- ✅ Export to JSON or print formatted summary to console
-- ✅ Error tracking for failed queries
-
-### 🖼️ `download_covers.py` - Batch Cover Downloads
-
-Download cover images for multiple albums:
-
-```bash
-# Download covers for specific albums
-python scripts/download_covers.py --ids 123456,789012,345678
-
-# Download covers from file
-python scripts/download_covers.py --file album_ids.txt --output ./my_covers
-```
-
-**Features**:
-- ✅ Batch download album covers
-- ✅ Custom output directory
-- ✅ Fast preview without downloading full albums
-- ✅ Useful for creating cover galleries
-
-### 📊 `ranking_tracker.py` - Ranking Tracker
-
-Track and export ranking changes over time:
-
-```bash
-# Get current daily ranking
-python scripts/ranking_tracker.py --period day --output daily_ranking.json
-
-# Get multiple pages of weekly ranking
-python scripts/ranking_tracker.py --period week --max-pages 3 --output weekly_top.csv
-
-# Track all periods (day, week, month)
-python scripts/ranking_tracker.py --all --output rankings/
-
-# Add timestamp to filename
-python scripts/ranking_tracker.py --period day --output ranking.json --add-timestamp
-```
-
-**Features**:
-- ✅ Track daily, weekly, or monthly rankings
-- ✅ Multi-page support
-- ✅ Export to CSV or JSON with timestamps
-- ✅ Track all periods at once with `--all`
-- ✅ Useful for trend analysis and discovering popular content
-
-### 🛠️ `post_process.py` - Post-Processing (Zip, PDF, LongImg)
-
-Transform downloaded images into ZIP, PDF, or Long Images:
-
-```bash
-# Convert album to PDF
-python scripts/post_process.py --id 123456 --type img2pdf
-
-# Pack album into encrypted ZIP and delete original images
-python scripts/post_process.py --id 123456 --type zip --password "my_secret" --delete
-
-# Merge images into a long scroll image
-python scripts/post_process.py --id 123456 --type long_img --outdir ./long_images
-
-# Use native dir_rule DSL (recommended for precise output paths)
-python scripts/post_process.py --id 123456 --type zip --dir-rule "Bd/{Atitle}/{Pindex}.zip" --base-dir "D:/Comics/Exports"
-```
-
-**Features**:
-- ✅ Supports ZIP, PDF, and Long Image formats
-- ✅ Option to encrypt output (Zip/PDF)
-- ✅ Automatic cleanup of original files
-- ✅ Custom output directories
+| Script | Purpose |
+| :--- | :--- |
+| `doctor.py` | Environment diagnostics: Python version, deps, config status, network/domain checks. |
+| `batch_download.py` | Download multiple albums from a list of IDs (CLI or file) with progress/error summary. |
+| `download_photo.py` | Download specific chapters/photos without fetching whole albums. |
+| `validate_config.py` | Validate `option.yml` and convert between YAML and JSON. |
+| `search_export.py` | Search by keyword/ranking/category and export to CSV or JSON (multi-page). |
+| `album_info.py` | Query detailed metadata for one or many albums; print or export to JSON. |
+| `download_covers.py` | Batch download album cover images to a custom output directory. |
+| `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
+| `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
 
 ## Script Parameters ↔ MCP Tools Mapping
 
@@ -440,14 +178,14 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `album_info.py` | `get_album_detail` | Partial | Batch wrapper over repeated single-album calls; output format is script-defined. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
-| `batch_download.py` | (non-MCP direct download flow) | None | Designed for installable skill runtime; does not guarantee MCP tool return shape/progress contract. |
+| `batch_download.py` | (non-MCP direct download flow) | None | Designed for installed package runtime; does not guarantee MCP tool return shape/progress contract. |
 | `download_photo.py` | `download_photo` (conceptual) | Partial | Script behavior focuses on batch orchestration and CLI outputs. |
 | `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
 
 ### Mapping Policy
 
 - **MCP tools are the source of truth** for agent-facing contracts (name, args, return structure).
-- **Scripts are operational helpers** for local/installed skill workflows and may expose different output formatting.
+- **Scripts are operational helpers** for local package workflows and may expose different output formatting.
 - If strict schema guarantees are required, prefer calling MCP tools directly instead of scripts.
 
 ## Important Notes

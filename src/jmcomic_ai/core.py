@@ -1,3 +1,6 @@
+import asyncio
+import functools
+import json
 import logging
 import os
 import sys
@@ -14,6 +17,7 @@ from jmcomic import (
     JmCategoryPage,
     JmcomicClient,
     JmcomicText,
+    JmDownloader,
     JmMagicConstants,
     JmModuleConfig,
     JmOption,
@@ -24,6 +28,193 @@ from jmcomic import (
 
 ENV_OPTION_PATH = "JM_OPTION_PATH"
 DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
+
+# Shared friendly-vocabulary -> JmMagicConstants mappings.
+# Used by both search_album and browse_albums so the order_by / time_range
+# vocabulary stays identical across the two tools (DRY).
+ORDER_BY_MAP: dict[str, str] = {
+    "latest": JmMagicConstants.ORDER_BY_LATEST,    # mr
+    "likes": JmMagicConstants.ORDER_BY_LIKE,       # tf
+    "views": JmMagicConstants.ORDER_BY_VIEW,       # mv
+    "pictures": JmMagicConstants.ORDER_BY_PICTURE,  # mp
+    "score": JmMagicConstants.ORDER_BY_SCORE,      # tr
+    "comments": JmMagicConstants.ORDER_BY_COMMENT,  # md
+}
+
+TIME_RANGE_MAP: dict[str, str] = {
+    "all": JmMagicConstants.TIME_ALL,
+    "day": JmMagicConstants.TIME_TODAY,
+    "today": JmMagicConstants.TIME_TODAY,
+    "week": JmMagicConstants.TIME_WEEK,
+    "month": JmMagicConstants.TIME_MONTH,
+}
+
+
+class _McpDownloaderBase(JmDownloader):  # type: ignore[misc, valid-type]
+    """共享 ctx/logger/safe_ctx_call 接线的基类。"""
+
+    def __init__(self, option: Any, ctx: Any, loop: Any, service_logger: logging.Logger, threading_mod: Any) -> None:
+        super().__init__(option)
+        self.ctx = ctx
+        self.loop = loop
+        self.service_logger = service_logger
+        self.threading_mod = threading_mod
+
+    def _safe_ctx_call(self, coro_func: Any, error_msg_prefix: str) -> None:
+        """安全地调用 MCP Context 异步方法，防止进度报告失败中止下载"""
+        if self.ctx:
+            try:
+                future = asyncio.run_coroutine_threadsafe(coro_func(), self.loop)
+                def _on_done(f: Any) -> None:
+                    try:
+                        f.result()
+                    except Exception as e:
+                        self.service_logger.warning(f"{error_msg_prefix}: {e}")
+                future.add_done_callback(_on_done)
+            except Exception as e:
+                self.service_logger.warning(f"{error_msg_prefix}: {e}")
+
+
+class McpProgressDownloader(_McpDownloaderBase):
+    def __init__(self, option: Any, ctx: Any, loop: Any, service_logger: logging.Logger, threading_mod: Any) -> None:
+        super().__init__(option, ctx, loop, service_logger, threading_mod)
+        self.photo_progress: dict[Any, dict[str, int]] = {}  # {photo_id: {"current": 0, "total": 0}}
+        self.lock = self.threading_mod.Lock()
+
+    def before_album(self, album: Any) -> None:
+        super().before_album(album)
+        # Send detailed album info
+        album_dict = {
+            "id": str(album.album_id),
+            "title": str(album.name),
+            "author": str(album.author),
+            "chapter_count": len(album),
+            "tags": album.tags,
+        }
+        msg = f"📚 Album Info: {json.dumps(album_dict, ensure_ascii=False)}"
+        self.service_logger.info(msg)
+        self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send album info to ctx")
+
+    def after_album(self, album: Any) -> None:
+        super().after_album(album)
+        msg = f"✅ Album download completed: {album.name}"
+        self.service_logger.info(msg)
+        self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send album completion to ctx")
+
+    def before_photo(self, photo: Any) -> None:
+        super().before_photo(photo)
+        with self.lock:
+            self.photo_progress[photo.photo_id] = {
+                "current": 0,
+                "total": len(photo)
+            }
+        msg = f"📖 Starting chapter: {photo.photo_id} - {photo.name} ({len(photo)} pages)"
+        self.service_logger.info(msg)
+        self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send chapter start to ctx")
+
+    def after_image(self, image: Any, img_save_path: str) -> None:
+        super().after_image(image, img_save_path)
+        photo_id = image.from_photo.photo_id
+        current = 0
+        total = 0
+
+        with self.lock:
+            if photo_id in self.photo_progress:
+                self.photo_progress[photo_id]["current"] += 1
+                current = self.photo_progress[photo_id]["current"]
+                total = self.photo_progress[photo_id]["total"]
+
+        if total > 0:
+            msg = f"Chapter {photo_id}: {current}/{total}"
+            self.service_logger.info(msg)
+            self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send image progress to ctx")
+
+
+class McpPhotoProgressDownloader(_McpDownloaderBase):
+    def __init__(self, option: Any, ctx: Any, loop: Any, service_logger: logging.Logger, threading_mod: Any) -> None:
+        super().__init__(option, ctx, loop, service_logger, threading_mod)
+        self.current = 0
+        self.total = 0
+        self.lock = self.threading_mod.Lock()
+
+    def before_photo(self, photo: Any) -> None:
+        super().before_photo(photo)
+        self.total = len(photo)
+
+        photo_dict = {
+            "id": str(photo.photo_id),
+            "name": str(photo.name),
+            "total_pages": self.total,
+        }
+        msg = f"📖 Photo Info: {json.dumps(photo_dict, ensure_ascii=False)}"
+        self.service_logger.info(msg)
+        self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send photo info to ctx")
+
+    def after_photo(self, photo: Any) -> None:
+        super().after_photo(photo)
+        msg = f"✅ Photo download completed: {photo.name} ({self.current} images)"
+        self.service_logger.info(msg)
+        self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send photo completion to ctx")
+
+    def after_image(self, image: Any, img_save_path: str) -> None:
+        super().after_image(image, img_save_path)
+        with self.lock:
+            self.current += 1
+            current = self.current
+            total = self.total
+
+        if total > 0:
+            percentage = int((current / total) * 100)
+            msg = f"Downloading: {percentage}% ({current}/{total})"
+        else:
+            msg = f"Downloading: {current} images downloaded"
+
+        self.service_logger.info(msg)
+        if self.ctx:
+            self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send download progress to ctx")
+            if hasattr(self.ctx, 'report_progress') and self.total > 0:
+                self._safe_ctx_call(
+                    lambda: self.ctx.report_progress(self.current, self.total),
+                    "Failed to report progress to ctx"
+                )
+
+
+def _build_progress_downloaders(
+    ctx: Any,
+    loop: Any,
+    service_logger: logging.Logger,
+    threading_mod: Any,
+) -> tuple[Any, Any]:
+    """
+    构建 album 级与 photo 级两个带进度上报的 JmDownloader 工厂（通过 functools.partial 预绑定参数）。
+
+    [not a tool]
+
+    Args:
+        ctx: MCP Context，可能为 None。
+        loop: 调用方所在的事件循环（用于 run_coroutine_threadsafe）。
+        service_logger: 日志器。
+        threading_mod: ``threading`` 模块（album 级进度需要 Lock）。
+
+    Returns:
+        (album_downloader_partial, photo_downloader_partial)
+    """
+    return (
+        functools.partial(
+            McpProgressDownloader,
+            ctx=ctx,
+            loop=loop,
+            service_logger=service_logger,
+            threading_mod=threading_mod
+        ),
+        functools.partial(
+            McpPhotoProgressDownloader,
+            ctx=ctx,
+            loop=loop,
+            service_logger=service_logger,
+            threading_mod=threading_mod
+        )
+    )
 
 
 def resolve_option_path(cli_path: str | None = None, logger: logging.Logger | None = None) -> Path:
@@ -132,7 +323,7 @@ class JmcomicService:
             console_handler.setFormatter(console_formatter)
             self.logger.addHandler(console_handler)
 
-        # Ensure our named logger doesn't propagate to root if handlers are present on both 
+        # Ensure our named logger doesn't propagate to root if handlers are present on both
         # but in our case we WANT it to go to file (via root) and stderr (via self).
         # To avoid double printing in file, we check if root already has a file handler.
 
@@ -215,7 +406,7 @@ class JmcomicService:
             # 如果有 likes 信息,也添加进去
             if "likes" in ainfo:
                 album_dict["likes"] = ainfo["likes"]
-            
+
             albums.append(album_dict)
 
         return {
@@ -232,7 +423,6 @@ class JmcomicService:
             "author": str(album.author),
             "likes": album.likes,
             "views": album.views,
-            "category": "0",  # JmAlbumDetail does not have a category field
             "tags": album.tags,
             "actors": album.actors,
             "description": str(album.description),
@@ -259,24 +449,54 @@ class JmcomicService:
             keyword: 搜索关键词（支持本子ID、标题、作者、标签等）。
             page: 页码，从1开始（默认值：1）。
             main_tag: 搜索范围 - 0 (站内), 1 (作品), 2 (作者), 3 (标签), 4 (角色)（默认值：0）。
-            order_by: 排序方式 - mr (最新), mv (观看), mp (图片), tf (点赞)（默认值："latest"）。
-            time_range: 时间过滤 - all (全部), today (今天), week (本周), month (本月)（默认值："all"）。
+            order_by: 排序方式，与 browse_albums 词汇一致。可选值：
+                - "latest": 最新更新
+                - "likes": 最多点赞
+                - "views": 最多观看
+                - "pictures": 最多图片
+                - "score": 评分最高
+                - "comments": 评论最多
+                （默认值："latest"）。
+            time_range: 时间过滤，与 browse_albums 词汇一致。可选值：
+                - "all": 全部时间
+                - "day" 或 "today": 今天
+                - "week": 本周
+                - "month": 本月
+                （默认值："all"）。
             category: 分类过滤 - "all" 或具体的 CID（默认值："all"）。
 
         返回:
             包含以下内容的字典：
                 - albums: 本子信息列表。
                 - total_count: 结果总数。
+                - error: 如果 order_by / time_range 参数无效，则包含错误信息（可选）。
         """
         client = self.get_client()
+
+        # Map friendly order_by / time_range vocabulary to JmMagicConstants
+        # (shared with browse_albums for a consistent tool surface).
+        order_value = ORDER_BY_MAP.get(order_by.lower())
+        time_value = TIME_RANGE_MAP.get(time_range.lower())
+
+        if order_value is None:
+            valid_orders = ", ".join(ORDER_BY_MAP.keys())
+            error_msg = f"Invalid order_by: {order_by}. Valid options: {valid_orders}"
+            self.logger.error(error_msg)
+            return {"albums": [], "total_count": 0, "error": error_msg}
+
+        if time_value is None:
+            valid_times = ", ".join(TIME_RANGE_MAP.keys())
+            error_msg = f"Invalid time_range: {time_range}. Valid options: {valid_times}"
+            self.logger.error(error_msg)
+            return {"albums": [], "total_count": 0, "error": error_msg}
 
         # Call core search method
         search_page: JmSearchPage = client.search(
             keyword,
             page=page,
             main_tag=main_tag,
-            order_by=order_by,
-            time=time_range,
+            order_by=order_value,
+            time=time_value,
             category=category,
             sub_category=None,
         )
@@ -293,12 +513,12 @@ class JmcomicService:
     ) -> dict[str, Any]:
         """
         浏览、过滤、排行本子，支持灵活的分类、时间范围和排序选项。
-        
+
         该工具结合了分类浏览和排行榜功能，支持：
         - 浏览特定分类（同人、韩漫等）。
         - 按时间范围过滤（今天、本周、本月、全部）。
         - 按不同标准排序（点赞、观看、最新、图片数、评分、评论数）。
-        
+
         参数:
             category: 分类过滤器。可选值：
                 - "all" 或 "0": 全部分类
@@ -312,14 +532,14 @@ class JmcomicService:
                 - "another": 其他
                 - "english_site": 英文站
                 (默认值: "all")
-            
+
             time_range: 时间范围过滤器。可选值：
                 - "all": 全部时间
                 - "day" 或 "today": 今天
                 - "week": 本周
                 - "month": 本月
                 (默认值: "all")
-            
+
             order_by: 排序方式。可选值：
                 - "latest": 最新更新
                 - "likes": 最多点赞
@@ -328,15 +548,15 @@ class JmcomicService:
                 - "score": 评分最高
                 - "comments": 评论最多
                 (默认值: "latest")
-            
+
             page: 页码，从1开始（默认值: 1）
-        
+
         返回:
             包含以下内容的字典：
                 - albums: 本子简要信息列表 (id, title, tags, cover_url)
                 - total_count: 结果总数
                 - error: 如果参数无效，则包含错误信息（可选）
-            
+
             注意：该 API 不包含详细统计数据（点赞/观看/作者）。
                   请使用 get_album_detail() 获取特定本子的完整信息。
 
@@ -351,7 +571,7 @@ class JmcomicService:
             browse_albums(category="hanman", time_range="week", order_by="views")
         """
         client = self.get_client()
-        
+
         # Category mapping
         category_map = {
             "all": JmMagicConstants.CATEGORY_ALL,
@@ -366,49 +586,30 @@ class JmcomicService:
             "another": JmMagicConstants.CATEGORY_ANOTHER,
             "english_site": JmMagicConstants.CATEGORY_ENGLISH_SITE,
         }
-        
-        # Time range mapping
-        time_map = {
-            "all": JmMagicConstants.TIME_ALL,
-            "day": JmMagicConstants.TIME_TODAY,
-            "today": JmMagicConstants.TIME_TODAY,
-            "week": JmMagicConstants.TIME_WEEK,
-            "month": JmMagicConstants.TIME_MONTH,
-        }
-        
-        # Sort order mapping
-        order_map = {
-            "latest": JmMagicConstants.ORDER_BY_LATEST,   # mr
-            "likes": JmMagicConstants.ORDER_BY_LIKE,      # tf
-            "views": JmMagicConstants.ORDER_BY_VIEW,      # mv
-            "pictures": JmMagicConstants.ORDER_BY_PICTURE, # mp
-            "score": JmMagicConstants.ORDER_BY_SCORE,     # tr
-            "comments": JmMagicConstants.ORDER_BY_COMMENT, # md
-        }
-        
-        # Validate and map parameters
+
+        # Validate and map parameters (time_range / order_by use shared maps)
         category_value = category_map.get(category.lower())
-        time_value = time_map.get(time_range.lower())
-        order_value = order_map.get(order_by.lower())
-        
+        time_value = TIME_RANGE_MAP.get(time_range.lower())
+        order_value = ORDER_BY_MAP.get(order_by.lower())
+
         if category_value is None:
             valid_categories = ", ".join(category_map.keys())
             error_msg = f"Invalid category: {category}. Valid options: {valid_categories}"
             self.logger.error(error_msg)
             return {"albums": [], "total_count": 0, "error": error_msg}
-        
+
         if time_value is None:
-            valid_times = ", ".join(time_map.keys())
+            valid_times = ", ".join(TIME_RANGE_MAP.keys())
             error_msg = f"Invalid time_range: {time_range}. Valid options: {valid_times}"
             self.logger.error(error_msg)
             return {"albums": [], "total_count": 0, "error": error_msg}
-        
+
         if order_value is None:
-            valid_orders = ", ".join(order_map.keys())
+            valid_orders = ", ".join(ORDER_BY_MAP.keys())
             error_msg = f"Invalid order_by: {order_by}. Valid options: {valid_orders}"
             self.logger.error(error_msg)
             return {"albums": [], "total_count": 0, "error": error_msg}
-        
+
         # Call unified categories_filter API
         search_page: JmCategoryPage = client.categories_filter(
             page=page,
@@ -417,12 +618,12 @@ class JmcomicService:
             order_by=order_value,
             sub_category=None,
         )
-        
+
         self.logger.info(
             f"Browse albums: category={category}, time_range={time_range}, "
             f"order_by={order_by}, page={page}, results={len(search_page)}"
         )
-        
+
         return self._parse_search_page(search_page)
 
     async def download_album(self, album_id: str, ctx: Context | None = None) -> dict[str, Any]:
@@ -446,7 +647,6 @@ class JmcomicService:
         """
         import asyncio
         import threading
-        from jmcomic import JmDownloader, JmAlbumDetail, JmImageDetail, JmPhotoDetail
 
         # 1. Get album metadata to predict download path
         album = self.get_client().get_album_detail(album_id)
@@ -457,73 +657,10 @@ class JmcomicService:
         service_logger = self.logger
         loop = asyncio.get_running_loop()
 
-        # 定义安全的 ctx 回调辅助函数
-        def safe_ctx_call(coro_func, error_msg_prefix: str):
-            """安全地调用 MCP Context 异步方法，防止进度报告失败中止下载"""
-            if ctx:
-                try:
-                    asyncio.run_coroutine_threadsafe(coro_func(), loop)
-                except Exception as e:
-                    service_logger.warning(f"{error_msg_prefix}: {e}")
-
-        # 2. Define Custom Downloader with Progress Logging
-        class McpProgressDownloader(JmDownloader):
-            def __init__(self, option):
-                super().__init__(option)
-                self.photo_progress = {}  # {photo_id: {"current": 0, "total": 0}}
-                self.lock = threading.Lock()
-
-            def before_album(self, album: JmAlbumDetail):
-                super().before_album(album)
-
-                # Send detailed album info
-                import json
-                album_dict = {
-                    "id": str(album.album_id),
-                    "title": str(album.name),
-                    "author": str(album.author),
-                    "chapter_count": len(album),
-                    "tags": album.tags,
-                }
-                msg = f"📚 Album Info: {json.dumps(album_dict, ensure_ascii=False)}"
-                service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send album info to ctx")  # type: ignore
-
-            def after_album(self, album: JmAlbumDetail):
-                super().after_album(album)
-                msg = f"✅ Album download completed: {album.name}"
-                service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send album completion to ctx")  # type: ignore
-
-            def before_photo(self, photo: JmPhotoDetail):
-                super().before_photo(photo)
-                with self.lock:
-                    self.photo_progress[photo.photo_id] = {
-                        "current": 0,
-                        "total": len(photo)
-                    }
-
-                msg = f"📖 Starting chapter: {photo.photo_id} - {photo.name} ({len(photo)} pages)"
-                service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send chapter start to ctx")  # type: ignore
-
-            def after_image(self, image: JmImageDetail, img_save_path: str):
-                super().after_image(image, img_save_path)
-
-                photo_id = image.from_photo.photo_id
-                current = 0
-                total = 0
-
-                with self.lock:
-                    if photo_id in self.photo_progress:
-                        self.photo_progress[photo_id]["current"] += 1
-                        current = self.photo_progress[photo_id]["current"]
-                        total = self.photo_progress[photo_id]["total"]
-
-                if total > 0:
-                    msg = f"Chapter {photo_id}: {current}/{total}"
-                    service_logger.info(msg)
-                    safe_ctx_call(lambda: ctx.info(msg), "Failed to send image progress to ctx")  # type: ignore
+        # 2. Build Custom Downloaders with Progress Logging (shared factory)
+        McpProgressDownloader, _ = _build_progress_downloaders(
+            ctx, loop, service_logger, threading
+        )
 
         # 3. Blocking Download Function
         def _blocking_download():
@@ -572,66 +709,16 @@ class JmcomicService:
                 - error: 如果失败则包含错误信息
         """
         import asyncio
-        from jmcomic import JmDownloader, JmPhotoDetail, JmImageDetail
+        import threading
 
         # Capture logger and loop for inner class
         service_logger = self.logger
         loop = asyncio.get_running_loop()
 
-        # 定义安全的 ctx 回调辅助函数
-        def safe_ctx_call(coro_func, error_msg_prefix: str):
-            """安全地调用 MCP Context 异步方法，防止进度报告失败中止下载"""
-            if ctx:
-                try:
-                    asyncio.run_coroutine_threadsafe(coro_func(), loop)
-                except Exception as e:
-                    service_logger.warning(f"{error_msg_prefix}: {e}")
-
-        # Define Custom Downloader with Progress Logging
-        class McpPhotoProgressDownloader(JmDownloader):
-            def __init__(self, option):
-                super().__init__(option)
-                self.current = 0
-                self.total = 0
-
-            def before_photo(self, photo: JmPhotoDetail):
-                super().before_photo(photo)
-                self.total = len(photo)
-
-                import json
-                photo_dict = {
-                    "id": str(photo.photo_id),
-                    "name": str(photo.name),
-                    "total_pages": self.total,
-                }
-                msg = f"📖 Photo Info: {json.dumps(photo_dict, ensure_ascii=False)}"
-                service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send photo info to ctx")  # type: ignore
-
-            def after_photo(self, photo: JmPhotoDetail):
-                super().after_photo(photo)
-                msg = f"✅ Photo download completed: {photo.name} ({self.current} images)"
-                service_logger.info(msg)
-                safe_ctx_call(lambda: ctx.info(msg), "Failed to send photo completion to ctx")  # type: ignore
-
-            def after_image(self, image: JmImageDetail, img_save_path: str):
-                super().after_image(image, img_save_path)
-                self.current += 1
-
-                if self.total > 0:
-                    percentage = int((self.current / self.total) * 100)
-                    msg = f"Downloading: {percentage}% ({self.current}/{self.total})"
-                else:
-                    msg = f"Downloading: {self.current} images downloaded"
-
-                service_logger.info(msg)
-                if ctx:
-                    safe_ctx_call(lambda: ctx.info(msg), "Failed to send download progress to ctx")  # type: ignore
-                    if hasattr(ctx, 'report_progress') and self.total > 0:
-                        safe_ctx_call(
-                            lambda: ctx.report_progress(self.current, self.total),  # type: ignore
-                            "Failed to report progress to ctx"
-                        )
+        # Build Custom Downloaders with Progress Logging (shared factory)
+        _, McpPhotoProgressDownloader = _build_progress_downloaders(
+            ctx, loop, service_logger, threading
+        )
 
         # Blocking Download Function
         def _blocking_download():
@@ -697,7 +784,7 @@ class JmcomicService:
             album_id: 本子 ID (例如 "123456")
 
         返回:
-            包含详细信息的字典：id, title, author, likes, views, category,
+            包含详细信息的字典：id, title, author, likes, views,
             tags, actors, description, chapter_count, update_time, cover_url。
         """
         client = self.get_client()
