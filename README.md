@@ -258,9 +258,10 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     ```bash
     jmai skills install
     ```
-2.  技能文件将默认安装到 `~/.claude/skills/jmcomic`。
+2.  技能文件将默认安装到 `~/.claude/skills/jmcomic`（Claude 系客户端的技能目录）。
 3.  **使用**：
-    - **支持 Agent Skills 的客户端**：安装后会自动发现并按需加载，**无需手动复制**，直接开聊即可。
+    - **Claude 系客户端**（Claude Code / Claude Desktop）：从 `~/.claude/skills/` 自动发现并按需加载，**无需手动复制**，直接开聊即可。
+    - **其他支持 Agent Skills 的客户端**：这些客户端从各自的技能目录读取，需把 `skills/jmcomic` 目录复制过去——Cursor 放到项目内 `.cursor/skills/`，Antigravity 放到 `~/.gemini/antigravity/`（或工作区 `.agent/skills/`），复制后即可自动发现。
     - **不支持 Agent Skills 的客户端**：需将 `SKILL.md` 内容手动粘贴到 System Prompt 或 Project Rules 中。
 
 ---
@@ -275,7 +276,7 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
 
 | 软件 (Software) | 配置文件路径 (Config File Path) |
 | :--- | :--- |
-| **Antigravity** | **Windows**: `%USERPROFILE%/.gemini/antigravity/mcp_config.json`<br>**macOS**: `~/Library/Application Support/Gemini/antigravity/mcp_config.json` |
+| **Antigravity** | **Windows**: `%USERPROFILE%/.gemini/antigravity/mcp_config.json`<br>**macOS / Linux**: `~/.gemini/antigravity/mcp_config.json` |
 | **Cursor** | **Global**: `%USERPROFILE%/.cursor/mcp.json` (Win) / `~/.cursor/mcp.json` (Mac/Linux)<br>**Project**: 项目根目录下的 `.cursor/mcp.json` |
 | **Claude Code** | **User-Scoped**: `%USERPROFILE%/.claude.json` (Win) / `~/.claude.json` (Mac/Linux)<br>**Project-Scoped**: 项目根目录下的 `.mcp.json` |
 | **Claude Desktop** | **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`<br>**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json` |

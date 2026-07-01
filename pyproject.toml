@@ -56,22 +56,6 @@ include = [
     "/pyproject.toml",
     "/CHANGELOG.md",
 ]
-# 排除不必要的文件和目录
-exclude = [
-    "/.github",
-    "/tests",
-    "/images",
-    "/reference",
-    "/.gitignore",
-    "/.pre-commit-config.yaml",
-    "/AGENT.md",
-    "/uv.lock",
-    "*.log",
-    "/.pytest_cache",
-    "/.ruff_cache",
-    "/.venv",
-    "/.idea",
-]
 
 [tool.ruff]
 line-length = 120
