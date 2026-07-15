@@ -5,7 +5,7 @@
 ## ⚠️ 重要说明
 
 - 此目录中的代码**已在 .gitignore 中设置忽略，不会被提交到 Git**
-- 运行时使用的是 `pyproject.toml` 中声明的 PyPI 依赖 (`jmcomic>=2.6.12`)
+- 运行时使用的是 `pyproject.toml` 中声明的 PyPI 依赖 (`jmcomic>=2.7.1,<3.0.0`)
 - 如需修改 jmcomic 的行为，请直接向上游提交 PR
 
 ## 📁 目录结构

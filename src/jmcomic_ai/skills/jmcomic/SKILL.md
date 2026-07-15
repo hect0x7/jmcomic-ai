@@ -3,7 +3,7 @@ name: jmcomic
 description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.0.10"
+  version: "0.1.0"
   dependencies: python>=3.10
 ---
 
@@ -122,6 +122,8 @@ download:
 
 # Set proxy
 client:
+  async_impl: async_api  # Used by jmcomic native async APIs
+  cache: level_option    # Reuse metadata across clients from this option
   postman:
     meta_data:
       proxies:

@@ -182,6 +182,8 @@ version: "2.0"
 
 client:
   impl: html
+  async_impl: async_api
+  cache: level_option
   # Try multiple domains in order
   domain:
     html:
@@ -267,6 +269,8 @@ download:
 # Client configuration
 client:
   impl: html
+  async_impl: async_api
+  cache: level_option
   domain:
     html:
       - 18comic.vip

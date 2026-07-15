@@ -14,28 +14,32 @@ from pathlib import Path
 def check_python_version():
     print(f"🐍 Python version: {sys.version.split()[0]}")
 
+
 def check_dependencies():
     print("📦 Checking dependencies...")
     try:
         import jmcomic
+
         print(f"✅ jmcomic version: {jmcomic.__version__}")
     except ImportError:
         print("❌ Error: jmcomic library not found.")
 
     try:
         from jmcomic_ai.core import JmcomicService  # noqa: F401
+
         print("✅ jmcomic_ai core is accessible.")
     except ImportError:
         print("❌ Error: jmcomic_ai core not found.")
 
+
 def check_network():
     """
     检查网络连接性，测试当前IP可以访问哪些禁漫域名
-    完全按照 reference/assets/docs/sources/tutorial/8_pick_domain.md 实现
+    使用 jmcomic 2.7.1+ 提供的官方域名发现 API
     """
     print("🌐 Checking network connectivity (Dynamic Domain Discovery)...")
     try:
-        from jmcomic import JmcomicText, JmOption, disable_jm_log, multi_thread_launcher
+        from jmcomic import JmModuleConfig, JmOption, disable_jm_log, multi_thread_launcher
     except ImportError:
         print("❌ Error: Missing jmcomic dependencies.")
         return
@@ -45,49 +49,15 @@ def check_network():
 
     option = JmOption.default()
 
-    # meta_data 可用于配置代理等
-    meta_data = {
-        # 'proxies': ProxyBuilder.clash_proxy()
-    }
-
-    def get_all_domain():
-        """获取所有可用域名"""
-        template = 'https://jmcmomic.github.io/go/{}.html'
-        url_ls = [template.format(i) for i in range(300, 309)]
+    # 1. 获取所有域名
+    print("📡 Fetching latest domain list from the JMComic publish page...")
+    try:
+        domain_set = set(JmModuleConfig.get_html_domain_all())
+    except Exception:
         domain_set = set()
 
-        def fetch_domain(url):
-            try:
-                # 优先使用 curl_cffi.requests，如果不可用则回退到默认实现
-                try:
-                    from curl_cffi import requests as postman
-                except ImportError:
-                    from jmcomic import JmModuleConfig
-                    postman = JmModuleConfig.get_postman_clz()()
-
-                # allow_redirects=False 对于这些跳转页面至关重要
-                resp = postman.get(url, allow_redirects=False, **meta_data)
-                text = resp.text
-
-                for domain in JmcomicText.analyse_jm_pub_html(text):
-                    if domain.startswith('jm365.work'):
-                        continue
-                    domain_set.add(domain)
-            except Exception:
-                pass
-
-        multi_thread_launcher(
-            iter_objs=url_ls,
-            apply_each_obj_func=fetch_domain,
-        )
-        return domain_set
-
-    # 1. 获取所有域名
-    print("📡 Fetching latest domain list from jmcmomic.github.io...")
-    domain_set = get_all_domain()
-
     if not domain_set:
-        print("❌ Failed to discover any domains. You might need a proxy to access jmcmomic.github.io.")
+        print("❌ Failed to discover domains from the JMComic publish page. You might need to configure a proxy.")
         return
 
     print(f"🔍 Discovered {len(domain_set)} domains. Testing business connectivity...")
@@ -97,12 +67,12 @@ def check_network():
 
     def test_domain(domain: str):
         """测试单个域名的可用性"""
-        client = option.new_jm_client(impl='html', domain_list=[domain], **meta_data)
-        status = 'ok'
+        client = option.new_jm_client(impl="html", domain_list=[domain])
+        status = "ok"
 
         try:
             # 测试一个已知的通用相册ID
-            client.get_album_detail('123456')
+            client.get_album_detail("123456")
         except Exception as e:
             status = str(e.args)
 
@@ -114,13 +84,13 @@ def check_network():
     )
 
     # 3. 输出测试结果
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Domain Test Results:")
-    print("="*50)
+    print("=" * 50)
 
     ok_domains = []
-    for domain, status in domain_status_dict.items():
-        if status == 'ok':
+    for domain, status in sorted(domain_status_dict.items()):
+        if status == "ok":
             print(f"✅ {domain}: {status}")
             ok_domains.append(domain)
         else:
@@ -129,10 +99,12 @@ def check_network():
             print(f"❌ {domain}: {error_msg}")
 
     # 4. 输出总结
-    print("="*50)
+    print("=" * 50)
     if ok_domains:
         print(f"✨ Network summary: {len(ok_domains)}/{len(domain_set)} domains are working.")
-        print(f"💡 Recommended domain for config: {ok_domains[0]}")
+        print("💡 Recommended HTML domain pool for config:")
+        for domain in sorted(ok_domains):
+            print(f"   - {domain}")
     else:
         print("❌ All discovered domains failed. You likely need to configure a proxy.")
 
@@ -145,8 +117,9 @@ def check_config():
     else:
         print("ℹ️ Config not found at default location (~/.jmcomic/option.yml). Using built-in defaults.")
 
+
 def main():
-    print("🏥 JMComic Skill Doctor - Diagnostic Report\n" + "="*45)
+    print("🏥 JMComic Skill Doctor - Diagnostic Report\n" + "=" * 45)
     check_python_version()
     print("-" * 20)
     check_dependencies()
@@ -154,7 +127,8 @@ def main():
     check_config()
     print("-" * 20)
     check_network()
-    print("="*45 + "\n✨ Diagnostic complete.")
+    print("=" * 45 + "\n✨ Diagnostic complete.")
+
 
 if __name__ == "__main__":
     main()

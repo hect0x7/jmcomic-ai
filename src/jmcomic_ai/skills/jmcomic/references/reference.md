@@ -92,6 +92,15 @@ Network client configuration.
   - `html`: Web client (IP restricted but efficient)
   - `api`: APP client (no IP restriction, better compatibility)
 
+- **`async_impl`**: Native async client implementation
+  - Currently supported value: `async_api`
+  - Used by upstream `_async` APIs such as `download_album_async`
+
+- **`cache`**: Metadata cache scope for album details, searches, and other client requests
+  - `null` or `false`: Disable client metadata caching (default)
+  - `true` or `level_option`: Share one cache across clients created from the same option
+  - `level_client`: Keep an independent cache for each client
+
 - **`domain`**: Domain configuration for different implementations
   - **`html`**: Array of domains for HTML client
     - Example: `["18comic.vip", "18comic.org"]`
@@ -118,6 +127,8 @@ Network client configuration.
 ```yaml
 client:
   impl: html
+  async_impl: async_api
+  cache: null
   domain:
     html:
       - 18comic.vip
@@ -302,6 +313,8 @@ download:
 
 client:
   impl: html
+  async_impl: async_api
+  cache: level_option
   domain:
     html:
       - 18comic.vip

@@ -13,6 +13,7 @@ The mission of this project is to **transform the JMComic crawler into an AI-nat
 
 - **`src/jmcomic_ai/core.py`**: The "Brain". All business logic and tool implementations reside here in `JmcomicService`.
 - **`src/jmcomic_ai/mcp/server.py`**: The "Interface". Uses `FastMCP` to dynamically register methods from `JmcomicService` as MCP tools.
+- **`src/jmcomic_ai/skills/manager.py`**: The "Distributor". Owns platform-specific Agent Skills installation paths and safe install/uninstall behavior.
 - **`reference/jmcomic_src/`**: The "Knowledge Base". Contains the source code of the underlying `jmcomic` library. **Always read this first** when implementing new tools.
 
 > [!IMPORTANT]
@@ -69,6 +70,13 @@ When asked to add a new feature or tool, follow these steps:
 | **Logging** | Use `self.logger`. Always log the start, result, and any errors of an operation. |
 | **Path Handling** | Use `pathlib.Path`. Print physical log paths upon initialization. |
 | **Configuration** | Support both `option.yml` updates and environment variable overrides (`${VAR}`). |
+
+## 🔐 Privacy & Repository Hygiene
+
+- Never commit local absolute paths, usernames, home directories, logs, cookies, credentials, tokens, or private configuration values.
+- Documentation examples must use obvious placeholders or environment variables such as `${JM_COOKIE_AVS}`.
+- Before finishing a change, scan tracked files and the current diff for local paths and secrets.
+- Generated test artifacts, build outputs, and caches must be removed before handoff.
 
 ## 🧪 Testing Strategy
 - **Unit Tests**: Test core logic in `tests/test_core.py`.

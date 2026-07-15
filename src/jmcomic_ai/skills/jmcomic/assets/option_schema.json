@@ -28,6 +28,33 @@
                     ],
                     "description": "Client implementation type. 'html' for web client (IP restricted but efficient), 'api' for APP client (no IP restriction, better compatibility)"
                 },
+                "async_impl": {
+                    "type": "string",
+                    "enum": [
+                        "async_api"
+                    ],
+                    "default": "async_api",
+                    "description": "Async client implementation used by jmcomic native async APIs"
+                },
+                "cache": {
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "string",
+                            "enum": [
+                                "level_option",
+                                "level_client"
+                            ]
+                        }
+                    ],
+                    "default": null,
+                    "description": "Metadata cache scope. null/false disables caching, true or level_option shares cache across clients created by one option, and level_client keeps a per-client cache"
+                },
                 "domain": {
                     "oneOf": [
                         {

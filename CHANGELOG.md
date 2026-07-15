@@ -5,6 +5,24 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.0] - 2026-07-16
+
+### Added
+- 🧪 **上游兼容性回归测试**：新增原生异步下载 API 存在性与默认 Client 配置字段覆盖测试，防止依赖或 Schema 再次失配。
+- 🤖 **多平台 Skills 安装**：`jmai skills install/uninstall` 新增交互式平台选择、`jmai skills -i/-u` 快捷入口和 `--platform claude|codex|gemini|all` 自动化参数，支持 Claude、Codex 与 Gemini CLI 用户级技能目录，并增加端到端安装/卸载测试。
+- 🔐 **隐私开发规范**：`AGENTS.md` 新增本地路径、日志、Cookie、密钥和测试产物的仓库隐私检查要求。
+
+### Changed
+- 📦 **上游依赖基线升级**：将 `jmcomic` 支持基线提升至 `>=2.7.1,<3.0.0`，确保运行时具备原生异步 API、客户端缓存和新版批量结果类型。
+- 🌐 **域名诊断对齐上游**：`doctor.py` 改用 `JmModuleConfig.get_html_domain_all` 从 JMComic 发布页发现域名，不再复制旧版域名抓取实现，并输出完整可用域名池。
+- 📚 **配置自省资料同步**：Schema、`SKILL.md` 和配置示例新增 `client.async_impl` 与 `client.cache`，与 `jmcomic 2.7.1` 默认配置保持一致。
+
+### Fixed
+- 🧠 **MCP Option Schema 拒绝合法字段**：修复 `additionalProperties: false` 导致上游默认 `async_impl`、`cache` 配置被错误判定为非法的问题。
+
+### Removed
+- 🗑️ **GitHub 域名发现回退**：删除通过 GitHub 镜像获取 JMComic 域名的功能，域名诊断仅访问 JMComic 发布页。
+
 ## [0.0.10] - 2026-06-28
 
 ### Changed

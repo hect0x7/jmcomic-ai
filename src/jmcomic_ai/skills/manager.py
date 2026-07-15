@@ -4,12 +4,36 @@ from pathlib import Path
 
 
 class SkillManager:
+    PLATFORM_RELATIVE_DIRS = {
+        "claude": (".claude", "skills"),
+        "codex": (".agents", "skills"),
+        "gemini": (".gemini", "skills"),
+    }
+
     def __init__(self):
         # Locate the directory where this package's built-in skills are stored
         # Assumption: this file is at src/jmcomic_ai/skills/manager.py
         # and resources are at src/jmcomic_ai/skills/jmcomic/
         self.skills_source_dir = Path(__file__).parent / "jmcomic"
         self.skill_name: str = self.skills_source_dir.name
+
+    @classmethod
+    def get_platform_target_dirs(cls, platform: str, home_dir: Path | None = None) -> dict[str, Path]:
+        """Resolve one platform, or all supported platforms, to user-level skill directories."""
+        normalized_platform = platform.lower()
+        if normalized_platform == "all":
+            platforms = cls.PLATFORM_RELATIVE_DIRS
+        elif normalized_platform in cls.PLATFORM_RELATIVE_DIRS:
+            platforms = {normalized_platform: cls.PLATFORM_RELATIVE_DIRS[normalized_platform]}
+        else:
+            supported = ", ".join((*cls.PLATFORM_RELATIVE_DIRS, "all"))
+            raise ValueError(f"Unsupported platform '{platform}'. Choose from: {supported}")
+
+        resolved_home = home_dir or Path.home()
+        return {
+            platform_name: resolved_home.joinpath(*relative_parts)
+            for platform_name, relative_parts in platforms.items()
+        }
 
     def _get_skill_target_dir(self, target_dir: Path) -> Path:
         return target_dir / self.skill_name
@@ -36,7 +60,7 @@ class SkillManager:
         return {
             "target_dir": target_dir,
             "skill_target_dir": self._get_skill_target_dir(target_dir),
-            "files": self._list_relative_files(self.skills_source_dir)
+            "files": self._list_relative_files(self.skills_source_dir),
         }
 
     def get_uninstall_preview(self, target_dir: Path) -> dict:
@@ -46,7 +70,7 @@ class SkillManager:
             "target_dir": target_dir,
             "skill_target_dir": skill_target_dir,
             "exists": skill_target_dir.exists(),
-            "files": self._list_removable_files(skill_target_dir) if skill_target_dir.exists() else []
+            "files": self._list_removable_files(skill_target_dir) if skill_target_dir.exists() else [],
         }
 
     def _list_removable_files(self, skill_target_dir: Path) -> list[str]:
@@ -139,5 +163,5 @@ class SkillManager:
                 print(f"Removed empty skill dir: {skill_target_dir}")
             except OSError:
                 pass
-        
+
         return True

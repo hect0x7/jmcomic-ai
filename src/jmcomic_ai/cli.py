@@ -119,10 +119,55 @@ skills_app = typer.Typer(name="skills", help="Manage generic skills resources", 
 app.add_typer(skills_app, name="skills")
 
 
+@skills_app.callback(invoke_without_command=True)
+def skills_shortcuts(
+        ctx: typer.Context,
+        install_shortcut: bool = typer.Option(False, "--install", "-i", help="Interactive skill installation"),
+        uninstall_shortcut: bool = typer.Option(False, "--uninstall", "-u", help="Interactive skill uninstallation"),
+):
+    """Use -i/-u as shortcuts for the install/uninstall subcommands."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if install_shortcut and uninstall_shortcut:
+        raise typer.BadParameter("Choose either --install/-i or --uninstall/-u, not both")
+    if install_shortcut:
+        install_skills(target_dir=None, platform=None, force=False, yes=False)
+    elif uninstall_shortcut:
+        uninstall_skills(target_dir=None, platform=None, yes=False)
+
+
+def _prompt_skill_platform(action: str) -> str:
+    """Prompt for a supported Agent Skills platform."""
+    choices = {
+        "1": "claude",
+        "2": "codex",
+        "3": "gemini",
+        "4": "all",
+        "claude": "claude",
+        "codex": "codex",
+        "gemini": "gemini",
+        "all": "all",
+    }
+    typer.secho(f"\nSelect platforms to {action} the jmcomic skill:", fg=typer.colors.BRIGHT_CYAN, bold=True)
+    typer.echo("  1. Claude")
+    typer.echo("  2. Codex")
+    typer.echo("  3. Gemini CLI")
+    typer.echo("  4. All platforms")
+
+    while True:
+        selection = typer.prompt("Platform", default="4").strip().lower()
+        if selection in choices:
+            return choices[selection]
+        typer.secho("Invalid selection. Enter 1-4 or claude/codex/gemini/all.", fg=typer.colors.RED)
+
+
 @skills_app.command("install")
 def install_skills(
         target_dir: Path | None = typer.Argument(
-            None, help="Directory to install skills into. Defaults to ~/.claude/skills/jmcomic"
+            None, help="Custom parent directory to install the jmcomic skill into"
+        ),
+        platform: str | None = typer.Option(
+            None, "--platform", "-p", help="Target platform: claude, codex, gemini, or all"
         ),
         force: bool = typer.Option(False, "--force", "-f", help="Force overwrite existing files"),
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
@@ -134,24 +179,26 @@ def install_skills(
 
     manager = SkillManager()
 
-    if target_dir is None:
-        # Default to ~/.claude/skills (Standard for Claude Desktop)
-        target_dir = Path.home() / ".claude" / "skills"
-        typer.secho(f"[*] Path not specified, using default: {target_dir}", fg=typer.colors.CYAN)
-        typer.secho("[*] Hint: Use 'jmai skills install <PATH>' to install to a specific location", fg=typer.colors.CYAN)
+    if target_dir is not None:
+        target_dirs = {"custom": target_dir.resolve()}
+        typer.echo(f"[*] Target parent directory: {target_dirs['custom']}")
     else:
-        target_dir = target_dir.resolve()
-        typer.echo(f"[*] Target parent directory: {target_dir}")
+        selected_platform = platform or ("claude" if yes else _prompt_skill_platform("install"))
+        try:
+            target_dirs = manager.get_platform_target_dirs(selected_platform)
+        except ValueError as error:
+            raise typer.BadParameter(str(error), param_hint="--platform") from error
+        typer.secho(f"[*] Installing for platform selection: {selected_platform}", fg=typer.colors.CYAN)
+        typer.secho("[*] Hint: Pass a custom PATH to override platform directories", fg=typer.colors.CYAN)
 
     # 1. Preview
-    preview = manager.get_install_preview(target_dir)
     typer.secho("\n[ Installation Structure Preview ]", fg=typer.colors.BRIGHT_MAGENTA, bold=True)
-    typer.echo(f"Target Directory: {preview['skill_target_dir']}")
-    typer.echo("File Tree:")
-
-    # Simple tree visualization
-    for f in preview['files']:
-        typer.echo(f"  - {f}")
+    for platform_name, platform_target_dir in target_dirs.items():
+        preview = manager.get_install_preview(platform_target_dir)
+        typer.echo(f"[{platform_name}] Target Directory: {preview['skill_target_dir']}")
+        typer.echo("File Tree:")
+        for file_path in preview["files"]:
+            typer.echo(f"  - {file_path}")
     typer.echo("")
 
     # 2. Confirmation (unless -y is passed)
@@ -160,30 +207,33 @@ def install_skills(
             typer.echo("Installation cancelled.")
             return
 
-    if not target_dir.exists():
-        target_dir.mkdir(parents=True, exist_ok=True)
+    installed_platforms = []
+    for platform_name, platform_target_dir in target_dirs.items():
+        platform_target_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2. Duplicate Check / Conflict Handing
-    if force:
-        manager.install(target_dir, overwrite=True)
-    else:
-        if manager.has_conflicts(target_dir):
-            typer.echo("Warning: Some skill files already exist in the target directory.")
-            if yes or typer.confirm("Overwrite existing files?"):
-                manager.install(target_dir, overwrite=True)
+        if force:
+            manager.install(platform_target_dir, overwrite=True)
+        elif manager.has_conflicts(platform_target_dir):
+            typer.echo(f"Warning: Some skill files already exist for {platform_name}.")
+            if yes or typer.confirm(f"Overwrite existing files for {platform_name}?"):
+                manager.install(platform_target_dir, overwrite=True)
             else:
                 typer.echo("Skipping existing files.")
-                manager.install(target_dir, overwrite=False)
+                manager.install(platform_target_dir, overwrite=False)
         else:
-            manager.install(target_dir)
+            manager.install(platform_target_dir)
+        installed_platforms.append(platform_name)
 
-    typer.echo("Skills installed successfully.")
+    typer.echo(f"Skills installed successfully for: {', '.join(installed_platforms)}")
 
 
 @skills_app.command("uninstall")
 def uninstall_skills(
         target_dir: Path | None = typer.Argument(
-            None, help="Directory to uninstall skills from. Defaults to ~/.claude/skills/jmcomic"
+            None, help="Custom parent directory to uninstall the jmcomic skill from"
+        ),
+        platform: str | None = typer.Option(
+            None, "--platform", "-p", help="Target platform: claude, codex, gemini, or all"
         ),
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
@@ -194,41 +244,45 @@ def uninstall_skills(
 
     manager = SkillManager()
 
-    if target_dir is None:
-        # Default to ~/.claude/skills
-        target_dir = Path.home() / ".claude" / "skills"
-        typer.secho(f"[*] Path not specified, uninstalling from default: {target_dir}", fg=typer.colors.YELLOW)
+    if target_dir is not None:
+        target_dirs = {"custom": target_dir.resolve()}
+        typer.echo(f"[*] Uninstalling from: {target_dirs['custom']}")
     else:
-        target_dir = target_dir.resolve()
-        typer.echo(f"[*] Uninstalling from: {target_dir}")
-
-    if not target_dir.exists():
-        typer.echo(f"Target directory {target_dir} does not exist.")
-        return
+        selected_platform = platform or ("claude" if yes else _prompt_skill_platform("uninstall"))
+        try:
+            target_dirs = manager.get_platform_target_dirs(selected_platform)
+        except ValueError as error:
+            raise typer.BadParameter(str(error), param_hint="--platform") from error
+        typer.secho(f"[*] Uninstalling for platform selection: {selected_platform}", fg=typer.colors.YELLOW)
 
     # 1. Preview
-    preview = manager.get_uninstall_preview(target_dir)
-    if not preview['exists']:
-        typer.secho(f"[*] Skipped: No skill directory (jmcomic) found under {target_dir}", fg=typer.colors.YELLOW)
+    previews = {
+        platform_name: manager.get_uninstall_preview(platform_target_dir)
+        for platform_name, platform_target_dir in target_dirs.items()
+    }
+    existing_previews = {name: preview for name, preview in previews.items() if preview["exists"]}
+    if not existing_previews:
+        typer.secho("[*] Skipped: No jmcomic skill directory found for the selected targets", fg=typer.colors.YELLOW)
         return
 
     typer.secho("\n[ Uninstallation Preview ]", fg=typer.colors.BRIGHT_RED, bold=True)
     typer.secho("THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:", fg=typer.colors.RED)
-    typer.echo(f"Path: {preview['skill_target_dir']}")
-    typer.echo("File Tree:")
-    for f in preview['files']:
-        typer.echo(f"  - {f}")
+    for platform_name, preview in existing_previews.items():
+        typer.echo(f"[{platform_name}] Path: {preview['skill_target_dir']}")
+        typer.echo("File Tree:")
+        for file_path in preview["files"]:
+            typer.echo(f"  - {file_path}")
 
     typer.echo("\nOnly the specific skill folder (jmcomic) will be removed. Your other skills remain safe.")
     typer.echo("")
 
     # 2. Confirmation
     if yes or typer.confirm("Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?", default=False):
-        if manager.uninstall(target_dir):
-            typer.echo("Skills uninstalled successfully.")
-        else:
-            # This case is usually handled by the 'exists' check above, but as a fallback:
-            typer.secho("[*] Skipped: No skill directory found.", fg=typer.colors.YELLOW)
+        uninstalled_platforms = []
+        for platform_name, preview in existing_previews.items():
+            if manager.uninstall(preview["target_dir"]):
+                uninstalled_platforms.append(platform_name)
+        typer.echo(f"Skills uninstalled successfully for: {', '.join(uninstalled_platforms)}")
 
 
 # Option group

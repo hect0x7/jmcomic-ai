@@ -254,13 +254,26 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
 
 **配置方法:**
 
-1.  在终端运行命令，导出技能手册：
+1.  在终端运行命令，按交互菜单选择 Claude、Codex、Gemini CLI 或全部平台：
     ```bash
     jmai skills install
+    # 简写：jmai skills -i
     ```
-2.  技能文件将默认安装到 `~/.claude/skills/jmcomic`（Claude 系客户端的技能目录）。
+    自动化脚本也可以显式指定平台：
+    ```bash
+    jmai skills install --platform claude
+    jmai skills install --platform codex
+    jmai skills install --platform gemini
+    jmai skills install --platform all
+    ```
+    使用 `--yes` 且未指定 `--platform` 时，为保持向后兼容，会默认安装到 Claude。
+2.  各平台用户级安装目录：
+    - Claude：`~/.claude/skills/jmcomic`
+    - Codex：`~/.agents/skills/jmcomic`
+    - Gemini CLI：`~/.gemini/skills/jmcomic`
 3.  **使用**：
     - **Claude 系客户端**（Claude Code / Claude Desktop）：从 `~/.claude/skills/` 自动发现并按需加载，**无需手动复制**，直接开聊即可。
+    - **Codex / Gemini CLI**：使用对应 `--platform` 选项安装后，可从各自用户级 Skills 目录自动发现。
     - **其他支持 Agent Skills 的客户端**：这些客户端从各自的技能目录读取，需把 `skills/jmcomic` 目录复制过去——Cursor 放到项目内 `.cursor/skills/`，Antigravity 放到 `~/.gemini/antigravity/`（或工作区 `.agent/skills/`），复制后即可自动发现。
     - **不支持 Agent Skills 的客户端**：需将 `SKILL.md` 内容手动粘贴到 System Prompt 或 Project Rules 中。
 
@@ -397,7 +410,10 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     ```
 *   **Skills 管理**:
     ```bash
-    jmai skills install   # 安装 Skills 到默认目录 (~/.claude/skills/jmcomic)
+    jmai skills install                  # 交互选择目标平台
+    jmai skills -i                       # install 的交互式简写
+    jmai skills -u                       # uninstall 的交互式简写
+    jmai skills install --platform all   # 安装到 Claude、Codex、Gemini CLI
     ```
 *   **配置文件管理**:
     ```bash
