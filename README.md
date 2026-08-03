@@ -35,45 +35,30 @@
 
 现在，你可以像与人交谈一样，通过自然语言来搜索、筛选并下载漫画，而无需编写任何代码。
 
-### 📸 使用样例 (Usage Samples)
+### 📸 功能示例
 
-以下示例基于 AI 客户端（Cursor / Antigravity）
-
-| 1. 下载本子并转 PDF / ZIP | 2. 搜索【无修正】本子 | 3. 查详情 350234  | 4. 查询月度最多爱心前10个本子 |
+| 下载并生成 PDF / ZIP | 搜索本子 | 查看本子详情 | 查看排行榜 |
 | :---: | :---: | :---: | :---: |
 | ![Download and PDF](images/sample_download_album_convert_pdf.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Month Ranking by Likes](images/sample_month_ranking_by_score.png) |
-| **5. 修改option配置** | | | |
-| ![Update Option](images/sample_update_option.png) | | | |
-
+| **修改下载配置** | **查看评论** | | |
+| ![Update Option](images/sample_update_option.png) | ![Get Album Comments](images/sample_get_comment.png) | | |
 
 ---
 
-## 核心能力 / 你能用它做什么
+## ✨ 功能清单
 
-不仅仅是下载，JMComic AI 能够理解复杂的上下文指令：
-
-*   **智能搜索与下载**
-    > 🤔 *"帮我搜索作者 [XXX] 的作品，按浏览量排序，下载前 5 个最热门的本子。"*
-    >
-    > 🤖 **Agent**: 自动调用 `search_album` 获取列表，按 `views` 排序截取前 5，并发调用 `download_album`。
-
-    > 🤔 *"下载速度太慢了，帮我把图片并发数改为 50。"*
-    >
-    > 🤖 **Agent**: 理解意图，调用 `update_option` 修改 `download.threading.image: 50` 并实时生效。
-
-*   **模糊决策**
-    > 🤔 *"我想找一些画风类似 [某作品] 的短篇故事，不要超过 3 章的。"*
-    >
-    > 🤖 **Agent**: 结合语义检索与元数据过滤，为你推荐并整理符合口味的阅读清单。
-
-## ✨ 功能特性
-
-- 🧠 **Skills 知识注入** - 渐进式加载的技能手册、9 个 CLI 脚本和深度参考文档
-- 🔌 **MCP 标准集成** - 基于 `FastMCP` 构建，支持 stdio、SSE、HTTP 多种传输方式
-- 🛠️ **全功能工具集** - 9 个核心工具 + 3 个知识资源，覆盖搜索→下载→后处理全流程
-- ⚙️ **自然语言配置** - AI 可理解并动态修改 `option.yml` 配置
-- 📊 **实时进度追踪** - 下载过程通过 MCP 进度通知实时上报（MCP 路线）
-- 🎯 **统一 CLI** - 提供 `jmai` / `jmcomic-ai` 命令行工具
+| 类别 | 功能 |
+|:---|:---|
+| 🔍 **搜索与发现** | 关键词搜索、作者/标签/角色筛选、分类浏览、排行榜查询、本子详情 |
+| 💬 **评论** | 分页查看评论、递归回复与剧透标记 |
+| 📥 **下载** | 整本下载、单章下载、封面下载、批量下载、实时进度追踪 |
+| 🧾 **任务追踪** | 下载返回任务 ID 与专属日志路径，运行日志仅写入文件 |
+| 📦 **后处理** | 生成 ZIP、PDF 或长图，支持整本级与章节级处理 |
+| 📊 **数据整理** | 搜索结果导出 CSV/JSON、排行榜快照与变化追踪 |
+| ⚙️ **配置与账户** | 动态修改下载配置、配置校验与格式转换、账户登录与 Cookie 持久化 |
+| 🩺 **诊断** | 检查运行环境、配置文件、网络与域名可用性 |
+| 🧠 **Skills + CLI** | 技能手册、10 个配套脚本，以及 `jmai` / `jmcomic-ai` 命令行入口 |
+| 🔌 **MCP** | 10 个工具、3 个知识资源，支持 stdio、SSE 与 HTTP 传输 |
 
 ---
 
@@ -146,7 +131,7 @@ graph TB
 
         subgraph Route_MCP["🔌 路线 B：MCP"]
             Server["FastMCP Server"]
-            Tools["9 个工具\n理解靠 desc，动手靠调用"]
+            Tools["10 个工具\n理解靠 desc，动手靠调用"]
             Resources["3 个 Resources"]
         end
 
@@ -183,14 +168,15 @@ skills/jmcomic/
 │   ├── reference.md                # 配置完整参考
 │   ├── browse_albums.md            # browse_albums 工具详解
 │   ├── post_process.md             # 后处理 dir_rule DSL 详解
-│   ├── scripts.md                  # 9 个脚本的完整使用手册
+│   ├── scripts.md                  # 10 个脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
-└── 📂 scripts/                     # 9 个即用 CLI 脚本
+└── 📂 scripts/                     # 10 个即用 CLI 脚本
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
     ├── download_photo.py           # 📥 单章下载
     ├── search_export.py            # 🔍 搜索并导出 CSV/JSON
     ├── album_info.py               # 📋 本子详情查询
+    ├── album_comments.py           # 💬 评论与回复查询
     ├── download_covers.py          # 🖼️ 批量下载封面
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
@@ -210,13 +196,14 @@ skills/jmcomic/
 | `search_album` | 关键词搜索本子 | `keyword`, `order_by`, `time_range`, `main_tag` |
 | `browse_albums` | 分类浏览 + 排行榜（统一接口） | `category`, `order_by`, `time_range` |
 | `get_album_detail` | 获取本子详情（作者/标签/浏览量等） | `album_id` |
+| `get_album_comments` | 获取评论、剧透标记与多层回复 | `album_id`, `page` |
 
 ### 下载
 
 | 工具 | 功能 | 关键特性 |
 |:---|:---|:---|
-| `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回结构化结果 |
-| `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 |
+| `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
+| `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
 | `download_cover` | 下载封面图片 | 保存至 `covers/` 目录 |
 
 ### 后处理
@@ -426,6 +413,31 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     jmai --help           # 查看所有命令
     jmai mcp --help       # 查看 MCP 命令帮助
     ```
+
+---
+
+### 📝 日志与下载任务追踪
+
+普通运行日志只写入文件，不会输出到 stdout 或 stderr：
+
+| 类型 | 默认位置 | 覆盖方式 |
+|:---|:---|:---|
+| 全局日志 | `~/.jmcomic-ai/jmcomic_ai.log` | 环境变量 `JM_LOG_PATH` |
+| 下载任务日志 | `~/.jmcomic-ai/logs/<timestamp>-<task_id>.log` | 环境变量 `JM_TASK_LOG_DIR` |
+
+`download_album` 和 `download_photo` 无论成功或失败都会返回 `task_id` 与绝对 `log_path`。任务日志仅包含该次下载调用的记录，适合交给 Agent 继续诊断；全局日志则汇总 `jmcomic`、`jmcomic_ai` 和 MCP 框架的运行记录。
+
+```bash
+# 查看全局日志
+tail -f ~/.jmcomic-ai/jmcomic_ai.log
+
+# 使用自定义位置
+JM_LOG_PATH=/path/to/jmcomic_ai.log \
+JM_TASK_LOG_DIR=/path/to/task-logs \
+jmai mcp stdio
+```
+
+在 stdio 模式下，stdout 专用于 MCP JSON-RPC。MCP 协议响应不属于日志；Skills 脚本和其他显式 CLI 命令仍可把业务结果写到 stdout。
 
 ---
 

@@ -5,7 +5,7 @@ Complete reference for configuring `jmcomic` behavior.
 ## Top Level Fields
 
 - **`version`**: Configuration version string (e.g., "2.0")
-- **`log`**: Boolean, whether to enable console logging (default: true)
+- **`log`**: Boolean, whether `jmcomic` generates normal log records (default: true). JMComic AI routes these records to its global log file instead of stdout/stderr.
 - **`dir_rule`**: Directory and file naming rules
 - **`download`**: Download behavior configuration
 - **`client`**: Network client configuration (domains, retry, proxies, cookies)

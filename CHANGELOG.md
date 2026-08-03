@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+## [0.1.1] - 2026-08-03
+
+### Added
+- 💬 **评论读取能力**：新增只读 MCP 工具 `get_album_comments` 与 Skills 脚本 `album_comments.py`，支持分页获取评论、递归回评和剧透标识。
+- 📝 **下载任务专属日志**：`download_album` 与 `download_photo` 每次调用都会创建隔离的任务日志，并在成功或失败结果中返回 `task_id` 和绝对 `log_path`；可通过 `JM_TASK_LOG_DIR` 覆盖默认日志目录。
+
+### Changed
+- 📦 **上游依赖基线升级**：将 `jmcomic` 支持基线提升至 `>=2.7.3,<3.0.0`，同步评论实体与任务上下文日志能力。
+- 🔖 **版本单一来源**：仅在 `src/jmcomic_ai/__init__.py` 维护包版本；Hatch 构建与 CLI 读取同一静态值，Skill 不再复制包版本。
+- ✅ **版本校验精简**：`.github/check_version.py` 仅校验源码版本与发版提交前缀一致；动态版本不再重复写入 `pyproject.toml`、Skill 和 `uv.lock`。
+
+### Fixed
+- 🔌 **stdio 协议与日志隔离**：`jmcomic`、`jmcomic_ai` 与 MCP 框架运行日志统一写入全局日志文件，不再向 stdout/stderr 输出普通日志；`jmai mcp stdio` 的 stdout 仅承载 JSON-RPC，避免协议消息和 Skills 脚本 JSON 输出被日志污染。
+
 ## [0.1.0] - 2026-07-16
 
 ### Added

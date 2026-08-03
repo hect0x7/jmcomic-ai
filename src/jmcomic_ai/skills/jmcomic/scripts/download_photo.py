@@ -63,9 +63,9 @@ async def main():
         sys.exit(1)
 
     print("📷 Batch Photo Download Tool")
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
     print(f"Total chapters to download: {len(photo_ids)}")
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
     # Initialize service
     service = JmcomicService(option_path=args.option)
@@ -88,13 +88,15 @@ async def main():
         elif result.get("status") == "success":
             print(f"✅ Successfully downloaded chapter {photo_id} ({result.get('image_count')} images)")
             print(f"   📂 {result.get('download_path')}")
+            print(f"   📝 {result.get('log_path')}")
             success_count += 1
         else:
             print(f"❌ Failed to download chapter {photo_id}: {result.get('error')}")
+            print(f"   📝 {result.get('log_path')}")
             failed_ids.append(photo_id)
 
     # Summary
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("📊 Download Summary:")
     print(f"✅ Successful: {success_count}/{len(photo_ids)}")
     print(f"❌ Failed: {len(failed_ids)}/{len(photo_ids)}")
@@ -104,7 +106,7 @@ async def main():
         for pid in failed_ids:
             print(f"  - {pid}")
 
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
 
 
 if __name__ == "__main__":

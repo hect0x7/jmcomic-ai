@@ -1,6 +1,6 @@
 [project]
 name = "jmcomic-ai"
-version = "0.1.0"
+dynamic = ["version"]
 description = "AI-powered JMComic crawler with MCP server and skills management for seamless AI agent integration"
 readme = "README.md"
 license = "MIT"
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "jmcomic>=2.7.1,<3.0.0",
+    "jmcomic>=2.7.3,<3.0.0",
     "mcp",
     "typer",
     "watchdog>=6.0.0",
@@ -43,6 +43,9 @@ jmai = "jmcomic_ai.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/jmcomic_ai/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/jmcomic_ai"]

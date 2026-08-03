@@ -9,10 +9,10 @@ Usage:
     python tests/test_mcp_integration.py
 """
 
-import unittest
 import contextlib
-import time
 import socket
+import time
+import unittest
 from multiprocessing import Process
 
 from mcp import ClientSession
@@ -97,6 +97,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             expected = [
                 "search_album",
                 "get_album_detail",
+                "get_album_comments",
                 "browse_albums",
                 "download_album",
                 "download_photo",
@@ -147,6 +148,15 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(result)
             print("\n[OK] get_album_detail executed successfully")
 
+    async def test_tool_get_album_comments(self):
+        """Test structured album comment retrieval."""
+        async with self._mcp_session() as session:
+            print(f"\n=== Testing get_album_comments(album_id='{TEST_ALBUM_ID}') ===")
+            result = await session.call_tool("get_album_comments", {"album_id": TEST_ALBUM_ID, "page": 1})
+            print(f"  Result: {str(result)[:200]}...")
+            self.assertIsNotNone(result)
+            print("\n[OK] get_album_comments executed successfully")
+
     async def test_tool_browse_albums(self):
         """Test browse_albums tool (replaces get_ranking and get_category_list)"""
         async with self._mcp_session() as session:
@@ -156,7 +166,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             print(f"  Result: {str(result)[:200]}...")
             self.assertIsNotNone(result)
             print("\n[OK] browse_albums (ranking mode) executed successfully")
-            
+
             # Test 2: Browse by category
             print("\n=== Testing browse_albums(category='doujin') ===")
             result = await session.call_tool("browse_albums", {"category": "doujin", "page": 1})
@@ -285,6 +295,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             tool_tests = [
                 ("search_album", {"keyword": TEST_SEARCH_KEYWORD, "page": 1}),
                 ("get_album_detail", {"album_id": TEST_ALBUM_ID}),
+                ("get_album_comments", {"album_id": TEST_ALBUM_ID, "page": 1}),
                 ("browse_albums", {"time_range": "day", "order_by": "likes", "page": 1}),
                 ("browse_albums", {"category": "doujin", "page": 1}),
                 ("download_cover", {"album_id": TEST_ALBUM_ID}),
