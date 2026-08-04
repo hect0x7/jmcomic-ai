@@ -49,6 +49,9 @@ def main():
     result = service.post_process(args.id, args.type, params)
     print(result)
 
+    if result.get("status") != "success":
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

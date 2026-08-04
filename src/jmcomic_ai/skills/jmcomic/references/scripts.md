@@ -9,6 +9,10 @@ lists. All tools support the `--help` flag for detailed usage information.
 > from a synced checkout). If `jmai` was installed into an isolated venv via `uv tool`/`pipx`, invoke
 > the scripts with that same interpreter, or just use the MCP tools instead.
 
+Output file paths follow the current working directory. Export scripts automatically create missing
+parent directories before writing. Commands that finish with any failed item return a non-zero process
+exit code, so shell scripts and agents can reliably distinguish complete success from partial failure.
+
 ## 🏥 `doctor.py` - Environment Diagnostics
 
 Comprehensive diagnostic tool that checks your entire setup:
@@ -109,6 +113,8 @@ python scripts/search_export.py --category doujin --output doujin.csv --max-page
 - ✅ Search by keyword, ranking, or category
 - ✅ Multi-page support with `--max-pages`
 - ✅ Export to CSV or JSON format
+- ✅ CSV columns include every field returned across the fetched result set
+- ✅ Create missing parent directories for output files
 - ✅ Useful for building album catalogs and collections
 
 ## 📖 `album_info.py` - Album Information Query
@@ -130,6 +136,7 @@ python scripts/album_info.py --file album_ids.txt --output album_details.json --
 - ✅ Query single or multiple albums
 - ✅ Display detailed metadata (title, author, likes, views, chapters, tags, description)
 - ✅ Export to JSON or print formatted summary to console
+- ✅ Create missing parent directories for JSON output
 - ✅ Error tracking for failed queries
 
 ## 💬 `album_comments.py` - Album Comments Query
@@ -193,6 +200,8 @@ python scripts/ranking_tracker.py --period day --output ranking.json --add-times
 - ✅ Track daily, weekly, or monthly rankings
 - ✅ Multi-page support
 - ✅ Export to CSV or JSON with timestamps
+- ✅ CSV columns include every field returned across the fetched result set
+- ✅ Create missing parent directories for output files
 - ✅ Track all periods at once with `--all`
 - ✅ Useful for trend analysis and discovering popular content
 

@@ -112,6 +112,9 @@ async def main():
 
     print(f"{'=' * 50}")
 
+    if failed_ids:
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

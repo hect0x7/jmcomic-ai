@@ -87,9 +87,17 @@ def export_to_csv(results: list[dict], output_path: Path):
         print("⚠️ No results to export")
         return
 
+    core_fields = ["id", "title", "tags", "cover_url"]
+    extra_fields = [
+        key
+        for result in results
+        for key in result
+        if key not in core_fields
+    ]
+    fieldnames = [*core_fields, *dict.fromkeys(extra_fields)]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-        # Use first result to determine fields
-        fieldnames = ["id", "title", "tags", "cover_url"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         writer.writeheader()
@@ -104,6 +112,7 @@ def export_to_csv(results: list[dict], output_path: Path):
 
 def export_to_json(results: list[dict], output_path: Path):
     """Export results to JSON format"""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 

@@ -253,7 +253,13 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     jmai skills install --platform gemini
     jmai skills install --platform all
     ```
+    安装和卸载交互会根据系统语言自动使用中文或英文，也可以显式指定：
+    ```bash
+    jmai skills install --lang zh
+    JMAI_LANG=en jmai skills uninstall
+    ```
     使用 `--yes` 且未指定 `--platform` 时，为保持向后兼容，会默认安装到 Claude。
+    如果目标 `jmcomic` 目录是外部管理的软链接，卸载命令只会提示并跳过，不会删除链接或链接目标。
 2.  各平台用户级安装目录：
     - Claude：`~/.claude/skills/jmcomic`
     - Codex：`~/.agents/skills/jmcomic`
@@ -401,6 +407,7 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     jmai skills -i                       # install 的交互式简写
     jmai skills -u                       # uninstall 的交互式简写
     jmai skills install --platform all   # 安装到 Claude、Codex、Gemini CLI
+    jmai skills install --lang zh        # 显式使用中文交互
     ```
 *   **配置文件管理**:
     ```bash

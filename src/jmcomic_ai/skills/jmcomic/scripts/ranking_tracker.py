@@ -45,9 +45,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def fetch_ranking(service: JmcomicService, period: str, max_pages: int) -> list[dict]:
+def fetch_ranking(service: JmcomicService, period: str, max_pages: int) -> tuple[list[dict], bool]:
     """Fetch ranking for a specific period"""
     all_results: list[dict] = []
+    failed = False
 
     for page in range(1, max_pages + 1):
         print(f"  📄 Fetching {period} ranking page {page}...")
@@ -72,9 +73,10 @@ def fetch_ranking(service: JmcomicService, period: str, max_pages: int) -> list[
             print(f"  ✅ Found {len(results)} albums")
         except Exception as e:
             print(f"  ❌ Error on page {page}: {e}")
+            failed = True
             break
 
-    return all_results
+    return all_results, failed
 
 
 def export_to_csv(results: list[dict], output_path: Path):
@@ -83,8 +85,17 @@ def export_to_csv(results: list[dict], output_path: Path):
         print(f"⚠️ No results to export to {output_path}")
         return
 
+    core_fields = ["rank", "id", "title", "tags", "cover_url", "period"]
+    extra_fields = [
+        key
+        for result in results
+        for key in result
+        if key not in core_fields
+    ]
+    fieldnames = [*core_fields, *dict.fromkeys(extra_fields)]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-        fieldnames = ["rank", "id", "title", "tags", "cover_url", "period"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         writer.writeheader()
@@ -104,6 +115,7 @@ def export_to_json(results: list[dict], output_path: Path):
         "rankings": results
     }
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
@@ -141,12 +153,15 @@ def main():
         periods = [args.period]
 
     # Fetch and export rankings
+    had_failures = False
     for period in periods:
         print(f"\n🔍 Fetching {period} ranking (max {args.max_pages} pages)...")
-        results = fetch_ranking(service, period, args.max_pages)
+        results, fetch_failed = fetch_ranking(service, period, args.max_pages)
+        had_failures = had_failures or fetch_failed
 
         if not results:
             print(f"❌ No results for {period} ranking")
+            had_failures = True
             continue
 
         # Determine output path
@@ -165,6 +180,9 @@ def main():
     print(f"\n{'='*50}")
     print("✨ Tracking complete!")
     print(f"{'='*50}")
+
+    if had_failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

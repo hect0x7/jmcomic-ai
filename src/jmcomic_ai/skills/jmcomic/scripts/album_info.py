@@ -18,6 +18,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 try:
     from jmcomic_ai.core import JmcomicService
@@ -90,6 +91,14 @@ def fetch_album_details(service: JmcomicService, album_ids: list[str], verbose: 
     return results, failed
 
 
+def format_count(value: Any) -> str:
+    """Format numeric API values with separators while preserving unknown values."""
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def print_album_summary(album: dict):
     """Print a single album summary"""
     print(f"\n{'='*60}")
@@ -97,7 +106,7 @@ def print_album_summary(album: dict):
     print(f"{'='*60}")
     print(f"ID: {album['id']}")
     print(f"Author: {album['author']}")
-    print(f"Likes: {album['likes']:,} | Views: {album['views']:,}")
+    print(f"Likes: {format_count(album['likes'])} | Views: {format_count(album['views'])}")
     print(f"Chapters: {album['chapter_count']}")
     print(f"Updated: {album['update_time']}")
     print(f"Tags: {', '.join(album['tags'][:5])}")
@@ -134,6 +143,7 @@ def main():
             "failed": failed
         }
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, indent=2, ensure_ascii=False)
 
@@ -155,6 +165,9 @@ def main():
             print(f"  - {item['id']}: {item['error']}")
 
     print(f"{'='*60}")
+
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

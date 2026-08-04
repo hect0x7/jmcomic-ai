@@ -133,6 +133,9 @@ def main():
     print(f"\n📂 Covers saved to: {output_dir}")
     print(f"{'='*50}")
 
+    if failed_ids:
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

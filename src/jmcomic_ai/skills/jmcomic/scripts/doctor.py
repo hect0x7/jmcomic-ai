@@ -17,12 +17,14 @@ def check_python_version():
 
 def check_dependencies():
     print("📦 Checking dependencies...")
+    success = True
     try:
         import jmcomic
 
         print(f"✅ jmcomic version: {jmcomic.__version__}")
     except ImportError:
         print("❌ Error: jmcomic library not found.")
+        success = False
 
     try:
         from jmcomic_ai.core import JmcomicService  # noqa: F401
@@ -30,6 +32,9 @@ def check_dependencies():
         print("✅ jmcomic_ai core is accessible.")
     except ImportError:
         print("❌ Error: jmcomic_ai core not found.")
+        success = False
+
+    return success
 
 
 def check_network():
@@ -42,7 +47,7 @@ def check_network():
         from jmcomic import JmModuleConfig, JmOption, disable_jm_log, multi_thread_launcher
     except ImportError:
         print("❌ Error: Missing jmcomic dependencies.")
-        return
+        return False
 
     # 禁用 jmcomic 的冗余日志输出
     disable_jm_log()
@@ -58,7 +63,7 @@ def check_network():
 
     if not domain_set:
         print("❌ Failed to discover domains from the JMComic publish page. You might need to configure a proxy.")
-        return
+        return False
 
     print(f"🔍 Discovered {len(domain_set)} domains. Testing business connectivity...")
 
@@ -108,6 +113,8 @@ def check_network():
     else:
         print("❌ All discovered domains failed. You likely need to configure a proxy.")
 
+    return bool(ok_domains)
+
 
 def check_config():
     print("⚙️ Checking configuration...")
@@ -122,12 +129,15 @@ def main():
     print("🏥 JMComic Skill Doctor - Diagnostic Report\n" + "=" * 45)
     check_python_version()
     print("-" * 20)
-    check_dependencies()
+    dependencies_ok = check_dependencies()
     print("-" * 20)
     check_config()
     print("-" * 20)
-    check_network()
+    network_ok = check_network()
     print("=" * 45 + "\n✨ Diagnostic complete.")
+
+    if not dependencies_ok or not network_ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
