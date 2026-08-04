@@ -1,3 +1,4 @@
+import json
 from enum import Enum
 from pathlib import Path
 
@@ -84,23 +85,16 @@ def mcp(
     else:
         # Initialize service only when actually running the server (not the monitor process)
         service = JmcomicService(str(option) if option else None)
-        typer.echo(f"Starting MCP Server ({transport_value}) using option: {service.option_path}", err=True)
+        if transport != TransportType.stdio:
+            typer.echo(f"Starting MCP Server ({transport_value}) using option: {service.option_path}", err=True)
 
-        # Print configuration hint
-        import json
+            typer.echo(
+                "\n💡 Copy and paste the following configuration into your MCP client config (Cursor, Windsurf, "
+                "Claude Desktop, etc.)",
+                err=True,
+            )
 
-        typer.echo(
-            "\n💡 Copy and paste the following configuration into your MCP client config (Cursor, Windsurf, Claude Desktop, "
-            "etc.)",
-            err=True)
-
-        if transport == TransportType.stdio:
-            config = {"mcpServers": {"jmcomic-ai": {"command": "jmai", "args": ["mcp", "stdio"]}}}
-            typer.echo("\n--- MCP Client Config (STDIO Mode) ---", err=True)
-            typer.echo(json.dumps(config, indent=2), err=True)
-            typer.echo("----------------------------------------------------\n", err=True)
-
-        elif transport == TransportType.sse:
+        if transport == TransportType.sse:
             config = {"mcpServers": {"jmcomic-ai": {"url": f"http://{host}:{port}/sse"}}}
             typer.echo("\n--- MCP Client Config (SSE Mode) ---", err=True)
             typer.echo(json.dumps(config, indent=2), err=True)

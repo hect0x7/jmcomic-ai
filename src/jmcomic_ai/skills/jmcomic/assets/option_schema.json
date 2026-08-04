@@ -14,7 +14,7 @@
         "log": {
             "type": "boolean",
             "default": true,
-            "description": "Enable or disable jmcomic logging output"
+            "description": "Enable or disable jmcomic log records. JMComic AI routes enabled records to its global log file instead of stdout/stderr"
         },
         "client": {
             "type": "object",

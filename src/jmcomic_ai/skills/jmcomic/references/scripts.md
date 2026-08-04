@@ -47,6 +47,7 @@ python scripts/batch_download.py --ids 123456,789012 --option /path/to/option.ym
 - ✅ Download multiple albums concurrently
 - ✅ Progress tracking with success/failure counts
 - ✅ Error handling and summary report
+- ✅ Print each download's dedicated task log path on success or failure
 
 ## 📷 `download_photo.py` - Batch Chapter Downloads
 
@@ -67,6 +68,7 @@ python scripts/download_photo.py --ids 123456,789012 --option /path/to/option.ym
 - ✅ Download specific chapters without downloading entire albums
 - ✅ Useful for selective chapter downloads
 - ✅ Progress tracking and error handling
+- ✅ Print each download's dedicated task log path on success or failure
 
 ## ✅ `validate_config.py` - Configuration Validation
 
@@ -129,6 +131,27 @@ python scripts/album_info.py --file album_ids.txt --output album_details.json --
 - ✅ Display detailed metadata (title, author, likes, views, chapters, tags, description)
 - ✅ Export to JSON or print formatted summary to console
 - ✅ Error tracking for failed queries
+
+## 💬 `album_comments.py` - Album Comments Query
+
+Fetch one page of album comments as structured JSON:
+
+```bash
+# First comment page (print JSON to console)
+python scripts/album_comments.py --id 302820
+
+# Select another page
+python scripts/album_comments.py --id 302820 --page 2
+
+# Export the MCP-compatible response to a JSON file
+python scripts/album_comments.py --id 302820 --output comments.json
+```
+
+**Features**:
+- ✅ Includes recursive nested replies
+- ✅ Preserves `is_spoiler` for content filtering
+- ✅ Includes `total`, `page_count`, `page_size`, and current-page `comment_count`
+- ✅ Read-only; does not post comments or replies
 
 ## 🖼️ `download_covers.py` - Batch Cover Downloads
 

@@ -1,9 +1,8 @@
 ---
 name: jmcomic
-description: Search, browse, and download manga from JMComic (18comic). Use for manga discovery, ranking, downloads, and configuration management.
+description: Search, browse, inspect comments, and download manga from JMComic (18comic). Use for manga discovery, ranking, comment analysis, downloads, and configuration management.
 license: MIT
 metadata:
-  version: "0.1.0"
   dependencies: python>=3.10
 ---
 
@@ -16,14 +15,15 @@ This skill enables you to interact with JMComic (18comic), a popular manga platf
 Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
+- Read album comments and nested replies, including spoiler flags
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
-- **NEW**: Post-process downloaded content (Zip, PDF, LongImage) with **native parameters or `dir_rule`**
+- Post-process downloaded content (Zip, PDF, LongImage) with **native parameters or `dir_rule`**
 
 ### 📥 Download Tools Return Structured Data
 
-Both `download_album` and `download_photo` now return structured dictionaries:
+Both `download_album` and `download_photo` return structured dictionaries:
 
 **`download_album(album_id: str, ctx: Context = None)`** returns:
 ```python
@@ -32,6 +32,8 @@ Both `download_album` and `download_photo` now return structured dictionaries:
     "album_id": str,
     "title": str,
     "download_path": str,  # Absolute path to download directory
+    "task_id": str,        # Dedicated ID for this download invocation
+    "log_path": str,       # Absolute path to this task's log file
     "error": str | None
 }
 ```
@@ -43,15 +45,51 @@ Both `download_album` and `download_photo` now return structured dictionaries:
     "photo_id": str,
     "image_count": int,
     "download_path": str,  # Absolute path to download directory
+    "task_id": str,        # Dedicated ID for this download invocation
+    "log_path": str,       # Absolute path to this task's log file
     "error": str | None
 }
 ```
 
 **Real-time Progress Tracking**: Both methods accept an optional `ctx: Context` parameter (automatically injected by FastMCP). When provided, progress updates are sent via MCP notifications in real-time, allowing AI agents to monitor download progress.
 
+**Persistent Task Logs**: Every download invocation creates an isolated log file and returns its `task_id` and `log_path`, including failed downloads. Logs default to `~/.jmcomic-ai/logs`; set `JM_TASK_LOG_DIR` to use another directory.
+
+**File-only Logging**: Regular `jmcomic`, `jmcomic_ai`, and MCP runtime logs share `~/.jmcomic-ai/jmcomic_ai.log` and are not emitted to stdout or stderr. Set `JM_LOG_PATH` to override the global log file. MCP protocol messages and explicit CLI result output are unaffected.
+
+### Album Comments
+
+Use `get_album_comments(album_id: str, page: int = 1)` to read one page of comments. This is a read-only tool; it does not post comments or replies.
+
+```python
+{
+    "album_id": str,
+    "page": int,
+    "page_size": int,
+    "total": int | None,
+    "page_count": int | None,
+    "comment_count": int,
+    "comments": [
+        {
+            "comment_id": str | None,
+            "album_id": str | None,
+            "user_id": str | None,
+            "parent_comment_id": str | None,
+            "content": str,
+            "username": str,
+            "nickname": str,
+            "is_spoiler": bool,
+            "created_at": object,
+            "likes": int | None,
+            "replies": [...]  # Recursive nested replies
+        }
+    ]
+}
+```
+
 ## Core Capabilities
 
-### 🛠️ Post-Processing (New in 0.0.6)
+### 🛠️ Post-Processing
 
 This skill supports advanced post-processing of downloaded manga. It returns structured data including the **output path** of the generated file.
 
@@ -165,6 +203,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `validate_config.py` | Validate `option.yml` and convert between YAML and JSON. |
 | `search_export.py` | Search by keyword/ranking/category and export to CSV or JSON (multi-page). |
 | `album_info.py` | Query detailed metadata for one or many albums; print or export to JSON. |
+| `album_comments.py` | Fetch one page of album comments and recursive replies; print or export to JSON. |
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
 | `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
@@ -178,10 +217,11 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `search_export.py` | `search_album` / `browse_albums` | Partial | `--keyword` maps to `search_album`; `--ranking` / `--category` maps to `browse_albums`. Ranking is a convenience mode based on `time_range` + configurable sort, not a separate backend API. |
 | `post_process.py` | `post_process` | High | `--id`→`album_id`, `--type`→`process_type`, optional flags to `params`. `--dir-rule` + `--base-dir` map to `params.dir_rule`. |
 | `album_info.py` | `get_album_detail` | Partial | Batch wrapper over repeated single-album calls; output format is script-defined. |
+| `album_comments.py` | `get_album_comments` | High | `--id` maps to `album_id`, `--page` maps to `page`, and the JSON response preserves the MCP result shape. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
-| `batch_download.py` | (non-MCP direct download flow) | None | Designed for installed package runtime; does not guarantee MCP tool return shape/progress contract. |
-| `download_photo.py` | `download_photo` (conceptual) | Partial | Script behavior focuses on batch orchestration and CLI outputs. |
+| `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
+| `download_photo.py` | `download_photo` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
 | `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
 
 ### Mapping Policy

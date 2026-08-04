@@ -146,7 +146,9 @@ jmai mcp --help
 
 1. **查阅参考源码**：如前文所述，善用 `reference/` 目录。
 2. **实时日志与热重载**：
-    - 使用 `tail -f` 观察项目根目录下的 `jmcomic_ai.log` 日志。
+    - 使用 `tail -f ~/.jmcomic-ai/jmcomic_ai.log` 观察全局日志，或通过 `JM_LOG_PATH` 指定开发日志文件。
+    - 下载工具会在 `~/.jmcomic-ai/logs/` 写入任务专属日志；可通过 `JM_TASK_LOG_DIR` 指定目录。
+    - stdio 模式的 stdout 仅用于 MCP JSON-RPC，普通日志不会写入 stdout/stderr。
     - **热重载调试**：使用 `jmai mcp --reload` 启动服务。在该模式下，你对 `src/` 目录下代码的任何修改都会触发服务器自动重启，无需反复手动开关服务。
 3. **本地 AI 智能体/编辑器调试**：在你的客户端（如 Claude Code, Cursor, Antigravity 等）中添加本地开发配置。
    
@@ -178,6 +180,23 @@ jmai mcp --help
    1. 在终端运行：`uv run jmai mcp sse --reload`
    2. 在编辑器中配置 Server URL：`http://127.0.0.1:8000/sse`
    如果是 Cursor 或其他支持 MCP 的编辑器，通常在设置界面添加类似的 `command` 和 `args` 即可。
+
+## 发版准备
+
+1. 根据语义化版本确定新版本号；只修改 `src/jmcomic_ai/__init__.py` 的 `__version__`。Hatch 构建和 CLI 都读取该值，Skill 不保存包版本。
+2. 将 `CHANGELOG.md` 的 `Unreleased` 内容归档到 `## [x.y.z] - YYYY-MM-DD`。
+3. 更新锁文件并执行完整验证：
+
+   ```bash
+   uv lock
+   uv run python -m unittest discover tests
+   uv run ruff check src tests
+   uv run mypy src
+   uv run jmai --version
+   uv build
+   ```
+
+4. 发版提交必须使用 `v{version}: 更新点1; 更新点2` 格式，且版本号与 `src/jmcomic_ai/__init__.py` 一致。提交合并到 `master` 后，该版本号会作为 GitHub Release tag，并发布到 PyPI。
 
 ## 提交 Issue
 

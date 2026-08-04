@@ -55,11 +55,11 @@ When asked to add a new feature or tool, follow these steps:
 
 ### 5. Verify the MCP Integration
 - Run `uv run python tests/test_mcp_integration.py` (or use `python -m unittest discover tests` for all tests).
-- Ensure the new tool appears in the `list_tools` output and executes correctly via the SSE transport.
+- Ensure the new tool appears in `list_tools`, executes through the intended transport, and keeps stdio stdout valid JSON-RPC.
 
 ### 6. Record Changes in Changelog
 - **Critical**: You **MUST** document your changes in `CHANGELOG.md` after every code modification.
-- Add a concise entry under the content for the current version.
+- Add a concise entry under `Unreleased`; move it to the dated version section during release preparation.
 - Classify your change type: `Added`, `Changed`, `Fixed`, or `Removed`.
 
 ## 📜 Coding Standards for Agents
@@ -67,14 +67,15 @@ When asked to add a new feature or tool, follow these steps:
 | Feature | Requirement |
 | :--- | :--- |
 | **Async** | Long-running operations (downloads) must be async or backgrounded using `asyncio.to_thread`. |
-| **Logging** | Use `self.logger`. Always log the start, result, and any errors of an operation. |
-| **Path Handling** | Use `pathlib.Path`. Print physical log paths upon initialization. |
+| **Logging** | Use `self.logger`. Normal `jmcomic`, `jmcomic_ai`, root, and MCP framework logs must be file-only; never write ordinary logs to stdout/stderr. |
+| **Task Logs** | Download tools must return `task_id` and absolute `log_path` on success and failure. Preserve `JM_LOG_PATH` and `JM_TASK_LOG_DIR` overrides. |
+| **Path Handling** | Use `pathlib.Path`. Return physical output/log paths in structured tool results instead of printing them during stdio startup. |
 | **Configuration** | Support both `option.yml` updates and environment variable overrides (`${VAR}`). |
 
 ## 🔐 Privacy & Repository Hygiene
 
-- Never commit local absolute paths, usernames, home directories, logs, cookies, credentials, tokens, or private configuration values.
-- Documentation examples must use obvious placeholders or environment variables such as `${JM_COOKIE_AVS}`.
+- Never commit user-specific local paths or identifiers such as `/Users/<username>/...`, `/home/<username>/...`, or `C:\Users\<username>\...`. Do not commit real log contents, cookies, credentials, tokens, or private configuration values.
+- Documentation may include generic product-defined paths such as `~/.jmcomic-ai/...`. Use obvious placeholders or environment variables for machine-specific paths and sensitive values, such as `${JM_COOKIE_AVS}`.
 - Before finishing a change, scan tracked files and the current diff for local paths and secrets.
 - Generated test artifacts, build outputs, and caches must be removed before handoff.
 
@@ -87,37 +88,33 @@ When asked to add a new feature or tool, follow these steps:
 - Run Lint: `uv run ruff check src`
 - Format: `uv run ruff format src`
 - Update Dependencies: `uv sync`
-- Check Version: `python .github/check_version.py`
+- Check Version: `uv run python .github/check_version.py`
+- Build Package: `uv build`
 
 ## 📌 Version Management
 
-The version number must be kept consistent across the following three locations:
+`src/jmcomic_ai/__init__.py` is the only manually maintained package version source. Hatch reads its static `__version__` through `[tool.hatch.version]`, the CLI imports the same value, and the Skill does not carry a package version. Because the project version is dynamic, uv keeps the editable root package in `uv.lock` without duplicating its version. Release commits keep the existing `v{version}: ...` format, and that version must match `__init__.py`.
 
-| File | Format | Purpose |
-| :--- | :--- | :--- |
-| `pyproject.toml` | `version = "x.y.z"` | **Source of truth** for builds and releases |
-| `src/jmcomic_ai/__init__.py` | `__version__ = "x.y.z"` | Displayed by `jmai -v` CLI output |
-| `src/jmcomic_ai/skills/jmcomic/SKILL.md` | `version: "x.y.z"` | AI Skills metadata |
-
-### Automatic Validation
-The publish workflow (`.github/workflows/publish.yml`) runs version consistency checks before every release. If versions mismatch, the workflow fails and blocks the release.
-
-### Manual Validation
-During local development, you can run the following command to check version sync status:
-```bash
-python .github/check_version.py
-```
+### Version Validation
+The publish workflow runs `.github/check_version.py` before every release to verify that the `v{version}: ...` commit prefix matches `__init__.py`.
 
 ### Release Commit Convention
 To ensure the automatic release notes generator (`.github/release.py`) works correctly, use the following format for release commits:
 
 **Format**: `v{version}: {Update Point 1}; {Update Point 2}; ...`
 
-- **Version**: Must match the current version in `pyproject.toml`.
+- **Version**: Must match the current version in `src/jmcomic_ai/__init__.py`.
 - **Description**: Use semicolons (`;`) to separate multiple points. These will be automatically converted into a numbered list in the release notes.
 
 **Example**:
 `v0.0.5: Add file tree preview for skills management; Improve uninstallation safety; Refactor SkillManager to remove redundancy`
+
+### Release Preparation Checklist
+- Choose the next semantic version and update only `__version__` in `src/jmcomic_ai/__init__.py`.
+- Run `uv lock` after dependency or project metadata changes.
+- Move release entries from `Unreleased` to `## [x.y.z] - YYYY-MM-DD` in `CHANGELOG.md`.
+- Run the full tests, Ruff, MyPy, `jmai --version`, and `uv build`.
+- Use the release commit convention above. The version in the commit becomes the release tag; do not create the tag manually.
 
 ---
 

@@ -131,6 +131,6 @@ def run_server(transport: str, service: JmcomicService, host: str = "127.0.0.1",
     if mapped_transport != "stdio":
         mcp_server.settings.host = host
         mcp_server.settings.port = port
-    
+
     # 启动服务器
     mcp_server.run(transport=cast(Literal["stdio", "sse", "streamable-http"], mapped_transport))

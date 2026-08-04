@@ -3,9 +3,12 @@ import functools
 import json
 import logging
 import os
-import sys
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 try:
     from mcp.server.fastmcp import Context
@@ -13,6 +16,8 @@ except ImportError:
     Context = Any  # type: ignore
 
 from jmcomic import (
+    JmAlbumComment,
+    JmAlbumCommentPage,
     JmAlbumDetail,
     JmCategoryPage,
     JmcomicClient,
@@ -24,20 +29,28 @@ from jmcomic import (
     JmPageContent,
     JmSearchPage,
     create_option_by_file,
+    get_jm_task_context,
+    jm_logger,
+    jm_task_context,
 )
 
 ENV_OPTION_PATH = "JM_OPTION_PATH"
+ENV_LOG_PATH = "JM_LOG_PATH"
+ENV_TASK_LOG_DIR = "JM_TASK_LOG_DIR"
 DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
+DEFAULT_LOG_PATH = Path.home() / ".jmcomic-ai" / "jmcomic_ai.log"
+DEFAULT_TASK_LOG_DIR = Path.home() / ".jmcomic-ai" / "logs"
+GLOBAL_LOG_HANDLER_NAME = "jmcomic-ai-global-file"
 
 # Shared friendly-vocabulary -> JmMagicConstants mappings.
 # Used by both search_album and browse_albums so the order_by / time_range
 # vocabulary stays identical across the two tools (DRY).
 ORDER_BY_MAP: dict[str, str] = {
-    "latest": JmMagicConstants.ORDER_BY_LATEST,    # mr
-    "likes": JmMagicConstants.ORDER_BY_LIKE,       # tf
-    "views": JmMagicConstants.ORDER_BY_VIEW,       # mv
+    "latest": JmMagicConstants.ORDER_BY_LATEST,  # mr
+    "likes": JmMagicConstants.ORDER_BY_LIKE,  # tf
+    "views": JmMagicConstants.ORDER_BY_VIEW,  # mv
     "pictures": JmMagicConstants.ORDER_BY_PICTURE,  # mp
-    "score": JmMagicConstants.ORDER_BY_SCORE,      # tr
+    "score": JmMagicConstants.ORDER_BY_SCORE,  # tr
     "comments": JmMagicConstants.ORDER_BY_COMMENT,  # md
 }
 
@@ -48,6 +61,79 @@ TIME_RANGE_MAP: dict[str, str] = {
     "week": JmMagicConstants.TIME_WEEK,
     "month": JmMagicConstants.TIME_MONTH,
 }
+
+
+def _get_record_task_context(record: logging.LogRecord) -> Mapping[str, Any]:
+    """Read JM task context from a record, falling back to the current context."""
+    context = getattr(record, "jm_task_context", None)
+    if isinstance(context, Mapping):
+        return context
+    return dict(get_jm_task_context())
+
+
+def _configure_logger_file_only(
+    logger: logging.Logger,
+    global_handler: logging.FileHandler,
+) -> None:
+    """Route a logger to files only while preserving per-task file handlers."""
+    for handler in list(logger.handlers):
+        if handler is global_handler:
+            continue
+        if not isinstance(handler, logging.FileHandler) or handler.get_name() == GLOBAL_LOG_HANDLER_NAME:
+            logger.removeHandler(handler)
+            if handler.get_name() == GLOBAL_LOG_HANDLER_NAME:
+                handler.close()
+
+    if global_handler not in logger.handlers:
+        logger.addHandler(global_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+
+def _get_global_file_handler(log_path: Path) -> logging.FileHandler:
+    """Reuse one process-wide file handler for both JMComic logger namespaces."""
+    for logger in (logging.getLogger("jmcomic_ai"), jm_logger):
+        for handler in logger.handlers:
+            if (
+                isinstance(handler, logging.FileHandler)
+                and handler.get_name() == GLOBAL_LOG_HANDLER_NAME
+                and Path(handler.baseFilename).resolve() == log_path
+            ):
+                return handler
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.set_name(GLOBAL_LOG_HANDLER_NAME)
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    return handler
+
+
+class _TaskLogFilter(logging.Filter):
+    """Keep only records emitted by one MCP download task."""
+
+    def __init__(self, task_id: str) -> None:
+        super().__init__()
+        self.task_id = task_id
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        context = _get_record_task_context(record)
+        if context.get("task_id") != self.task_id:
+            return False
+
+        fields = [f"task_id={self.task_id}"]
+        mcp_tool = context.get("mcp_tool")
+        download_type = context.get("download_type")
+        jm_id = context.get("jm_id")
+        if mcp_tool is not None:
+            fields.append(f"mcp_tool={mcp_tool}")
+        if download_type is not None and jm_id is not None:
+            fields.append(f"{download_type}={jm_id}")
+        elif download_type is not None:
+            fields.append(f"download_type={download_type}")
+        elif jm_id is not None:
+            fields.append(f"jm_id={jm_id}")
+        record.jm_task_context_text = "; ".join(fields)
+        return True
 
 
 class _McpDownloaderBase(JmDownloader):  # type: ignore[misc, valid-type]
@@ -263,9 +349,17 @@ def resolve_option_path(cli_path: str | None = None, logger: logging.Logger | No
 
 
 class JmcomicService:
-    def __init__(self, option_path: str | None = None):
-        self._setup_logging()
+    def __init__(
+        self,
+        option_path: str | None = None,
+        task_log_dir: str | None = None,
+        log_path: str | None = None,
+    ):
+        self._setup_logging(log_path)
         self.option_path = resolve_option_path(option_path, self.logger)
+        self.task_log_dir = (
+            Path(task_log_dir or os.getenv(ENV_TASK_LOG_DIR) or DEFAULT_TASK_LOG_DIR).expanduser().resolve()
+        )
         self.option = self._load_option()
         self.client = self.option.build_jm_client()
         self._ensure_init()
@@ -289,46 +383,49 @@ class JmcomicService:
         """Ensure necessary initialization"""
         pass
 
-    def _setup_logging(self):
-        """Setup logging to both file and console"""
-        log_file = Path.cwd() / "jmcomic_ai.log"
+    def _setup_logging(self, log_path: str | None = None):
+        """Route jmcomic and jmcomic_ai logs to one global file only."""
+        self.log_path = Path(
+            log_path or os.getenv(ENV_LOG_PATH) or DEFAULT_LOG_PATH
+        ).expanduser().resolve()
         self.logger = logging.getLogger("jmcomic_ai")
-        self.logger.setLevel(logging.INFO)
+        global_handler = _get_global_file_handler(self.log_path)
+        _configure_logger_file_only(logging.getLogger(), global_handler)
+        _configure_logger_file_only(self.logger, global_handler)
+        _configure_logger_file_only(jm_logger, global_handler)
+        self.logger.info(f"Logging initialized: path={self.log_path}")
 
-        # 1. Ensure Root Logger has basic configuration (for 3rd party libs like mcp, uvicorn, jmcomic)
-        # We use a formatter similar to what was there before
-        root_logger = logging.getLogger()
-        if not root_logger.handlers:
-            root_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            # Root File Handler
-            try:
-                root_file_handler = logging.FileHandler(str(log_file), encoding='utf-8')
-                root_file_handler.setFormatter(root_formatter)
-                root_logger.addHandler(root_file_handler)
-                root_logger.setLevel(logging.INFO)
-            except Exception:
-                pass  # Fallback for read-only filesystems in CI
+    @contextmanager
+    def _download_task_log(self, tool_name: str, jm_id: str) -> Iterator[tuple[str, Path]]:
+        """Create and route logs for one MCP download tool invocation."""
+        safe_jm_id = "".join(char for char in str(jm_id) if char.isalnum() or char in "-_")[:48] or "unknown"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        task_id = f"{tool_name}-{safe_jm_id}-{uuid4().hex[:8]}"
 
-        # 2. Configure jmcomic_ai named logger (for nicer CLI output)
-        # Check if a StreamHandler already exists to avoid duplicate handlers
-        has_console_handler = any(
-            isinstance(handler, logging.StreamHandler) and getattr(handler, 'stream', None) in (sys.stderr, sys.stdout)
-            for handler in self.logger.handlers
+        self.task_log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = self.task_log_dir / f"{timestamp}-{task_id}.log"
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+        handler.addFilter(_TaskLogFilter(task_id))
+        handler.setFormatter(
+            logging.Formatter(
+                "[%(asctime)s] [%(threadName)s] [%(levelname)s] [%(jm_task_context_text)s] %(name)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
         )
 
-        if not has_console_handler:
-            console_handler = logging.StreamHandler(sys.stderr)
-            console_handler.setLevel(logging.INFO)
-            console_formatter = logging.Formatter("[*] %(message)s")
-            console_handler.setFormatter(console_formatter)
-            self.logger.addHandler(console_handler)
-
-        # Ensure our named logger doesn't propagate to root if handlers are present on both
-        # but in our case we WANT it to go to file (via root) and stderr (via self).
-        # To avoid double printing in file, we check if root already has a file handler.
-
-        self.logger.info(f"Logging to file: {log_file}")
-        sys.stderr.flush()
+        self.logger.addHandler(handler)
+        jm_logger.addHandler(handler)
+        try:
+            with jm_task_context(task_id=task_id, mcp_tool=tool_name):
+                self.logger.info(f"Task started: tool={tool_name}, jm_id={jm_id}")
+                try:
+                    yield task_id, log_path
+                finally:
+                    self.logger.info(f"Task finished: tool={tool_name}, jm_id={jm_id}")
+        finally:
+            self.logger.removeHandler(handler)
+            jm_logger.removeHandler(handler)
+            handler.close()
 
     def reload_option(self):
         """
@@ -431,16 +528,49 @@ class JmcomicService:
             "cover_url": JmcomicText.get_album_cover_url(album.album_id),
         }
 
+    def _parse_album_comment(self, comment: JmAlbumComment) -> dict[str, Any]:
+        """Convert one album comment and its nested replies to a dictionary."""
+        return {
+            "comment_id": str(comment.comment_id) if comment.comment_id is not None else None,
+            "album_id": str(comment.album_id) if comment.album_id is not None else None,
+            "user_id": str(comment.user_id) if comment.user_id is not None else None,
+            "parent_comment_id": (str(comment.parent_comment_id) if comment.parent_comment_id is not None else None),
+            "content": str(comment.content or ""),
+            "username": str(comment.username or ""),
+            "nickname": str(comment.nickname or ""),
+            "is_spoiler": bool(comment.is_spoiler),
+            "created_at": comment.created_at,
+            "likes": comment.likes,
+            "replies": [self._parse_album_comment(reply) for reply in comment.replies],
+        }
+
+    def _parse_album_comment_page(
+        self,
+        album_id: str,
+        page_number: int,
+        comment_page: JmAlbumCommentPage,
+    ) -> dict[str, Any]:
+        """Convert an album comment page to the stable MCP response shape."""
+        return {
+            "album_id": str(album_id),
+            "page": page_number,
+            "page_size": comment_page.page_size,
+            "total": comment_page.total,
+            "page_count": comment_page.page_count,
+            "comment_count": comment_page.comment_count,
+            "comments": [self._parse_album_comment(comment) for comment in comment_page],
+        }
+
     # --- Business Methods ---
 
     def search_album(
-            self,
-            keyword: str,
-            page: int = 1,
-            main_tag: int = 0,
-            order_by: str = "latest",
-            time_range: str = "all",
-            category: str = "all",
+        self,
+        keyword: str,
+        page: int = 1,
+        main_tag: int = 0,
+        order_by: str = "latest",
+        time_range: str = "all",
+        category: str = "all",
     ) -> dict[str, Any]:
         """
         搜索本子，支持高级过滤选项。
@@ -643,54 +773,44 @@ class JmcomicService:
                 - album_id: 本子 ID
                 - title: 本子标题
                 - download_path: 下载目录的绝对路径
+                - task_id: 本次 MCP 下载调用的任务 ID
+                - log_path: 本次调用专属日志文件的绝对路径
                 - error: 如果失败则包含错误信息
         """
-        import asyncio
         import threading
 
-        # 1. Get album metadata to predict download path
-        album = self.get_client().get_album_detail(album_id)
-        # Use native library method to decide the root directory
-        target_path = self.option.dir_rule.decide_album_root_dir(album)
-
-        # Capture logger and loop for inner class
-        service_logger = self.logger
-        loop = asyncio.get_running_loop()
-
-        # 2. Build Custom Downloaders with Progress Logging (shared factory)
-        McpProgressDownloader, _ = _build_progress_downloaders(
-            ctx, loop, service_logger, threading
-        )
-
-        # 3. Blocking Download Function
-        def _blocking_download():
+        with self._download_task_log("download-album", album_id) as (task_id, log_path):
+            album = None
+            target_path: Path | str = ""
             try:
-                self.logger.info(f"Starting blocking download for album {album_id}")
-                # Pass the class, jmcomic will instantiate it with self.option
-                self.option.download_album(album_id, downloader=McpProgressDownloader)
-                self.logger.info(f"Download completed for album {album_id}")
-            except Exception:
+                album = self.get_client().get_album_detail(album_id)
+                target_path = self.option.dir_rule.decide_album_root_dir(album)
+
+                loop = asyncio.get_running_loop()
+                McpProgressDownloader, _ = _build_progress_downloaders(ctx, loop, self.logger, threading)
+
+                def _blocking_download():
+                    self.logger.info(f"Starting blocking download for album {album_id}")
+                    self.option.download_album(album_id, downloader=McpProgressDownloader)
+                    self.logger.info(f"Download completed for album {album_id}")
+                    return "success"
+
+                status = await asyncio.to_thread(_blocking_download)
+                error_msg = None
+            except Exception as e:
+                status = "failed"
+                error_msg = str(e)
                 self.logger.exception(f"Download failed for album {album_id}")
-                raise
-            else:
-                return "success"
 
-        # 4. Execute (Blocking but in thread)
-        try:
-            status = await asyncio.to_thread(_blocking_download)
-            error_msg = None
-        except Exception as e:
-            status = "failed"
-            error_msg = str(e)
-            self.logger.error(f"Download failed: {error_msg}", exc_info=True)
-
-        return {
-            "status": status,
-            "album_id": album_id,
-            "title": str(album.name),
-            "download_path": str(target_path),
-            "error": error_msg,
-        }
+            return {
+                "status": status,
+                "album_id": album_id,
+                "title": str(album.name) if album is not None else "",
+                "download_path": str(target_path),
+                "task_id": task_id,
+                "log_path": str(log_path),
+                "error": error_msg,
+            }
 
     async def download_photo(self, photo_id: str, ctx: Context | None = None) -> dict[str, Any]:
         """
@@ -706,54 +826,44 @@ class JmcomicService:
                 - photo_id: 章节 ID
                 - image_count: 下载的图片数量
                 - download_path: 下载目录的绝对路径
+                - task_id: 本次 MCP 下载调用的任务 ID
+                - log_path: 本次调用专属日志文件的绝对路径
                 - error: 如果失败则包含错误信息
         """
-        import asyncio
         import threading
 
-        # Capture logger and loop for inner class
-        service_logger = self.logger
-        loop = asyncio.get_running_loop()
-
-        # Build Custom Downloaders with Progress Logging (shared factory)
-        _, McpPhotoProgressDownloader = _build_progress_downloaders(
-            ctx, loop, service_logger, threading
-        )
-
-        # Blocking Download Function
-        def _blocking_download():
-            try:
-                self.logger.info(f"Starting download for photo {photo_id}")
-                self.option.download_photo(photo_id, downloader=McpPhotoProgressDownloader)
-                self.logger.info(f"Download completed for photo {photo_id}")
-            except Exception:
-                self.logger.exception(f"Download failed for photo {photo_id}")
-                raise
-            else:
-                return "success"
-
-        # Execute (Blocking but in thread)
-        try:
-            status = await asyncio.to_thread(_blocking_download)
-            # Get photo details for response
-            photo = self.get_client().get_photo_detail(photo_id)
-            download_path = self.option.decide_image_save_dir(photo)
-            image_count = len(photo)
-            error_msg = None
-        except Exception as e:
-            status = "failed"
-            download_path = ""
+        with self._download_task_log("download-photo", photo_id) as (task_id, log_path):
+            download_path: Path | str = ""
             image_count = 0
-            error_msg = str(e)
-            self.logger.error(f"Download photo failed: {error_msg}", exc_info=True)
+            try:
+                loop = asyncio.get_running_loop()
+                _, McpPhotoProgressDownloader = _build_progress_downloaders(ctx, loop, self.logger, threading)
 
-        return {
-            "status": status,
-            "photo_id": photo_id,
-            "image_count": image_count,
-            "download_path": str(download_path),
-            "error": error_msg,
-        }
+                def _blocking_download():
+                    self.logger.info(f"Starting download for photo {photo_id}")
+                    result = self.option.download_photo(photo_id, downloader=McpPhotoProgressDownloader)
+                    self.logger.info(f"Download completed for photo {photo_id}")
+                    return result.detail
+
+                photo = await asyncio.to_thread(_blocking_download)
+                status = "success"
+                download_path = self.option.decide_image_save_dir(photo)
+                image_count = len(photo)
+                error_msg = None
+            except Exception as e:
+                status = "failed"
+                error_msg = str(e)
+                self.logger.exception(f"Download failed for photo {photo_id}")
+
+            return {
+                "status": status,
+                "photo_id": photo_id,
+                "image_count": image_count,
+                "download_path": str(download_path),
+                "task_id": task_id,
+                "log_path": str(log_path),
+                "error": error_msg,
+            }
 
     def login(self, username: str, password: str) -> str:
         """
@@ -790,6 +900,35 @@ class JmcomicService:
         client = self.get_client()
         album = client.get_album_detail(album_id)
         return self._parse_album_detail(album)
+
+    def get_album_comments(self, album_id: str, page: int = 1) -> dict[str, Any]:
+        """
+        获取本子的一页评论，包括递归回评和剧透标识。
+
+        参数:
+            album_id: 本子 ID (例如 "302820")。
+            page: 评论页码，从 1 开始（默认值：1）。
+
+        返回:
+            包含以下内容的字典：
+                - album_id: 本子 ID
+                - page: 当前页码
+                - page_size: 每页主评论数量
+                - total: 全部分页的主评论总数；不可用时为 null
+                - page_count: 总页数；不可用时为 null
+                - comment_count: 当前页主评论与所有层级回评总数
+                - comments: 评论列表，每条评论包含 replies 和 is_spoiler
+        """
+        if page < 1:
+            raise ValueError("page must be greater than or equal to 1")
+
+        self.logger.info(f"Fetching album comments: album_id={album_id}, page={page}")
+        comment_page = self.get_client().album_pagination(album_id, page=page)
+        result = self._parse_album_comment_page(album_id, page, comment_page)
+        self.logger.info(
+            f"Album comments fetched: album_id={album_id}, page={page}, comments={result['comment_count']}"
+        )
+        return result
 
     def download_cover(self, album_id: str) -> str:
         """

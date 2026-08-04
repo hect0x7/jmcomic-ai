@@ -54,6 +54,7 @@ class TestSkillPlatformCli(unittest.TestCase):
 
             self.assertEqual(0, result.exit_code, result.output)
             self.assertTrue((home_dir / ".claude" / "skills" / "jmcomic" / "SKILL.md").is_file())
+            self.assertTrue((home_dir / ".claude" / "skills" / "jmcomic" / "scripts" / "album_comments.py").is_file())
             self.assertFalse((home_dir / ".agents" / "skills" / "jmcomic").exists())
             self.assertFalse((home_dir / ".gemini" / "skills" / "jmcomic").exists())
 
