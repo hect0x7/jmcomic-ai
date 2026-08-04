@@ -10,6 +10,7 @@ contract required by the declared dependency baseline (see CHANGELOG 0.0.10).
 import asyncio
 import json
 import logging
+import os
 import tempfile
 import time
 import unittest
@@ -19,7 +20,14 @@ from unittest.mock import Mock
 
 from jmcomic import JmAlbumComment, JmAlbumCommentPage, JmcomicClient, JmOption, jm_log, jm_task_context
 
-from jmcomic_ai.core import ORDER_BY_MAP, TIME_RANGE_MAP, JmcomicService, _configure_logger_file_only
+from jmcomic_ai.core import (
+    GLOBAL_LOG_HANDLER_NAME,
+    ORDER_BY_MAP,
+    TIME_RANGE_MAP,
+    JmcomicService,
+    _configure_logger_file_only,
+    _get_global_file_handler,
+)
 
 
 class TestSharedMappings(unittest.TestCase):
@@ -58,6 +66,29 @@ class TestLoggingConfiguration(unittest.TestCase):
             finally:
                 task_handler.close()
                 global_handler.close()
+
+    @unittest.skipIf(os.name == "nt", "Creating symlinks requires extra privileges on Windows")
+    def test_global_handler_is_reused_for_symlinked_log_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            real_dir = temp_path / "real"
+            real_dir.mkdir()
+            linked_dir = temp_path / "linked"
+            linked_dir.symlink_to(real_dir, target_is_directory=True)
+
+            logger = logging.getLogger("jmcomic_ai")
+            handler = logging.FileHandler(linked_dir / "shared.log", encoding="utf-8")
+            handler.set_name(GLOBAL_LOG_HANDLER_NAME)
+            logger.addHandler(handler)
+            result = None
+            try:
+                result = _get_global_file_handler((real_dir / "shared.log").resolve())
+                self.assertIs(handler, result)
+            finally:
+                logger.removeHandler(handler)
+                handler.close()
+                if result is not None and result is not handler:
+                    result.close()
 
 
 class TestJmcomicCompatibility(unittest.TestCase):
@@ -191,6 +222,7 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
                 log_text = log_path.read_text(encoding="utf-8")
                 self.assertIn(f"jm-log-{own_id}", log_text)
                 self.assertIn(f"service-log-{own_id}", log_text)
+                self.assertIn("mcp_tool=download-album", log_text)
                 self.assertIn(f"album={own_id}", log_text)
                 self.assertNotIn(f"jm-log-{other_id}", log_text)
                 self.assertNotIn(f"service-log-{other_id}", log_text)
@@ -217,6 +249,40 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
             log_path = Path(result["log_path"])
             self.assertTrue(log_path.is_file())
             self.assertIn("expected download failure", log_path.read_text(encoding="utf-8"))
+
+    async def test_photo_download_uses_returned_detail_without_refetching(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = object.__new__(JmcomicService)
+            service.logger = logging.getLogger("jmcomic_ai.test.download-photo-result")
+            service.logger.setLevel(logging.INFO)
+            service.task_log_dir = Path(temp_dir)
+            service.client = Mock()
+            photo = [SimpleNamespace(id="1"), SimpleNamespace(id="2")]
+            download_dir = Path(temp_dir) / "photo-404"
+
+            class FakeOption:
+                @staticmethod
+                def download_photo(photo_id, downloader):
+                    del downloader
+                    with jm_task_context(download_type="photo", jm_id=photo_id):
+                        jm_log("test.download", f"jm-log-{photo_id}")
+                    return SimpleNamespace(detail=photo)
+
+                @staticmethod
+                def decide_image_save_dir(detail):
+                    self.assertIs(photo, detail)
+                    return download_dir
+
+            service.option = FakeOption()
+            result = await service.download_photo("404")
+
+            self.assertEqual("success", result["status"])
+            self.assertEqual(2, result["image_count"])
+            self.assertEqual(str(download_dir), result["download_path"])
+            service.client.get_photo_detail.assert_not_called()
+            log_text = Path(result["log_path"]).read_text(encoding="utf-8")
+            self.assertIn("mcp_tool=download-photo", log_text)
+            self.assertIn("photo=404", log_text)
 
 
 if __name__ == "__main__":

@@ -97,7 +97,7 @@ def _get_global_file_handler(log_path: Path) -> logging.FileHandler:
             if (
                 isinstance(handler, logging.FileHandler)
                 and handler.get_name() == GLOBAL_LOG_HANDLER_NAME
-                and Path(handler.baseFilename) == log_path
+                and Path(handler.baseFilename).resolve() == log_path
             ):
                 return handler
 
@@ -121,8 +121,11 @@ class _TaskLogFilter(logging.Filter):
             return False
 
         fields = [f"task_id={self.task_id}"]
+        mcp_tool = context.get("mcp_tool")
         download_type = context.get("download_type")
         jm_id = context.get("jm_id")
+        if mcp_tool is not None:
+            fields.append(f"mcp_tool={mcp_tool}")
         if download_type is not None and jm_id is not None:
             fields.append(f"{download_type}={jm_id}")
         elif download_type is not None:
@@ -838,12 +841,12 @@ class JmcomicService:
 
                 def _blocking_download():
                     self.logger.info(f"Starting download for photo {photo_id}")
-                    self.option.download_photo(photo_id, downloader=McpPhotoProgressDownloader)
+                    result = self.option.download_photo(photo_id, downloader=McpPhotoProgressDownloader)
                     self.logger.info(f"Download completed for photo {photo_id}")
-                    return "success"
+                    return result.detail
 
-                status = await asyncio.to_thread(_blocking_download)
-                photo = self.get_client().get_photo_detail(photo_id)
+                photo = await asyncio.to_thread(_blocking_download)
+                status = "success"
                 download_path = self.option.decide_image_save_dir(photo)
                 image_count = len(photo)
                 error_msg = None

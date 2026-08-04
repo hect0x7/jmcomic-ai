@@ -1,3 +1,4 @@
+import json
 from enum import Enum
 from pathlib import Path
 
@@ -86,9 +87,6 @@ def mcp(
         service = JmcomicService(str(option) if option else None)
         if transport != TransportType.stdio:
             typer.echo(f"Starting MCP Server ({transport_value}) using option: {service.option_path}", err=True)
-
-            # Print configuration hint for interactive network transports.
-            import json
 
             typer.echo(
                 "\n💡 Copy and paste the following configuration into your MCP client config (Cursor, Windsurf, "

@@ -8,8 +8,15 @@ from pathlib import Path
 
 try:
     from jmcomic_ai.core import JmcomicService
-except ImportError:
-    print("Error: jmcomic_ai not found. Please ensure the package is installed.")
+except ImportError as exc:
+    missing_module = getattr(exc, "name", None)
+    if isinstance(exc, ModuleNotFoundError) and missing_module == "jmcomic_ai":
+        message = "Error: jmcomic_ai not found. Please ensure the package is installed."
+    elif isinstance(exc, ModuleNotFoundError) and missing_module:
+        message = f"Error: failed to load jmcomic_ai because dependency '{missing_module}' is unavailable."
+    else:
+        message = f"Error: failed to import JmcomicService: {exc}"
+    print(message, file=sys.stderr)
     sys.exit(1)
 
 
@@ -24,9 +31,9 @@ def parse_args():
 
 def main():
     args = parse_args()
-    service = JmcomicService(option_path=args.option)
 
     try:
+        service = JmcomicService(option_path=args.option)
         result = service.get_album_comments(args.id, page=args.page)
     except Exception as e:
         print(f"Error: failed to fetch comments for album {args.id}: {e}", file=sys.stderr)
@@ -35,9 +42,14 @@ def main():
     output_text = json.dumps(result, indent=2, ensure_ascii=False)
     if args.output:
         output_path = Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(f"{output_text}\n", encoding="utf-8")
-        print(f"Exported comments to {output_path.resolve()}")
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(f"{output_text}\n", encoding="utf-8")
+            resolved_output_path = output_path.resolve()
+        except OSError as e:
+            print(f"Error: failed to export comments to {output_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Exported comments to {resolved_output_path}")
     else:
         print(output_text)
 
