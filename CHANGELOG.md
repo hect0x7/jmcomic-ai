@@ -7,7 +7,7 @@
 
 ## [Unreleased]
 
-## [0.1.3] - 2026-08-04
+## [0.1.2] - 2026-08-04
 
 ### Added
 - 🌐 **Skills 管理双语交互**：`jmai skills install/uninstall` 支持根据系统语言自动选择中文或英文，也可通过 `--lang zh|en` 或 `JMAI_LANG` 显式指定。
