@@ -111,47 +111,7 @@ uv sync
 
 ### 🏗️ 架构全景：两条独立路线
 
-```mermaid
-graph TB
-    subgraph User["👤 用户"]
-        NL["自然语言指令"]
-    end
-
-    subgraph Host["🖥️ AI 客户端"]
-        Agent["AI Agent"]
-    end
-
-    subgraph JmcomicAI["📦 JMComic AI"]
-        direction TB
-
-        subgraph Route_Skills["🧠 路线 A：Skills + CLI"]
-            SkillMD["SKILL.md\n理解靠文档"]
-            Scripts["scripts/\n动手靠脚本"]
-        end
-
-        subgraph Route_MCP["🔌 路线 B：MCP"]
-            Server["FastMCP Server"]
-            Tools["10 个工具\n理解靠 desc，动手靠调用"]
-            Resources["3 个 Resources"]
-        end
-
-        Core["JmcomicService 核心引擎"]
-    end
-
-    subgraph Upstream["📚 上游库"]
-        JmLib["jmcomic-crawler-python"]
-    end
-
-    NL --> Agent
-    Agent -. "路线 A" .-> SkillMD
-    SkillMD --> Scripts
-    Agent -. "路线 B" .-> Server
-    Server --> Tools
-    Server --> Resources
-    Scripts --> Core
-    Tools --> Core
-    Core --> JmLib
-```
+![JMComic AI 双路线架构](images/architecture-overview.png)
 
 ---
 
