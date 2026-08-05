@@ -93,7 +93,7 @@ When asked to add a new feature or tool, follow these steps:
 
 ## 📌 Version Management
 
-`src/jmcomic_ai/__init__.py` is the only manually maintained package version source. Hatch reads its static `__version__` through `[tool.hatch.version]`, the CLI imports the same value, and the Skill does not carry a package version. Because the project version is dynamic, uv keeps the editable root package in `uv.lock` without duplicating its version. Release commits use `v{version}: release`, and that version must match `__init__.py`.
+`src/jmcomic_ai/__init__.py` is the only manually maintained package version source. Hatch reads its static `__version__` through `[tool.hatch.version]`, the CLI imports the same value, and the Skill does not carry a package version. Because the project version is dynamic, uv keeps the editable root package in `uv.lock` without duplicating its version. Release commits use `v{version}: {summary}`, and that version must match `__init__.py`.
 
 ### Version Validation
 The publish workflow runs `.github/check_version.py` before every release to verify that the `v{version}: ...` commit prefix matches `__init__.py`.
@@ -101,13 +101,14 @@ The publish workflow runs `.github/check_version.py` before every release to ver
 ### Release Commit Convention
 The release commit only triggers publishing and identifies the version. The GitHub Release body is extracted from the matching `CHANGELOG.md` version section by `.github/release.py`.
 
-**Format**: `v{version}: release`
+**Format**: `v{version}: {summary}`
 
 - **Version**: Must match the current version in `src/jmcomic_ai/__init__.py`.
+- **Summary**: May be any concise description; it is not used as the GitHub Release body.
 - **Release body**: Must already exist under the matching `## [x.y.z] - YYYY-MM-DD` heading in `CHANGELOG.md`.
 
 **Example**:
-`v0.1.3: release`
+`v0.1.2: Improve Skill scripts and release workflow`
 
 ### Release Preparation Checklist
 - Choose the next semantic version and update only `__version__` in `src/jmcomic_ai/__init__.py`.

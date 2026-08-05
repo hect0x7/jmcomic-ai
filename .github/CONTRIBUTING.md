@@ -196,7 +196,7 @@ jmai mcp --help
    uv build
    ```
 
-4. 发版提交使用 `v{version}: release` 格式，且版本号与 `src/jmcomic_ai/__init__.py` 一致。提交只负责触发发布；Actions 从对应的 Changelog 版本段生成 GitHub Release 文案，然后创建同版本 tag 并发布到 PyPI。
+4. 发版提交使用 `v{version}: 摘要` 格式，冒号后的摘要可以自由填写且不作为 Release 文案；版本号必须与 `src/jmcomic_ai/__init__.py` 一致。提交只负责触发发布；Actions 从对应的 Changelog 版本段生成 GitHub Release 文案，然后创建同版本 tag 并发布到 PyPI。
 
 ## 提交 Issue
 

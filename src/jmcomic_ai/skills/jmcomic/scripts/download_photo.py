@@ -23,7 +23,10 @@ except ImportError:
 
 try:
     from jmcomic import JmcomicText
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic", "Please install: pip install jmcomic")
 
+try:
     from jmcomic_ai.core import JmcomicService
 except ImportError as exc:
     exit_for_import_error(exc, "jmcomic_ai", "Please ensure the package is installed.")

@@ -20,9 +20,10 @@ class TestAlbumCommentsScript(unittest.TestCase):
             patch.object(album_comments, "parse_args", return_value=args),
             patch.object(album_comments, "JmcomicService", side_effect=RuntimeError("invalid option")),
             redirect_stderr(stderr),
-            self.assertRaisesRegex(SystemExit, "1"),
+            self.assertRaises(SystemExit) as exit_context,
         ):
             album_comments.main()
+        self.assertEqual(1, exit_context.exception.code)
 
         self.assertIn("failed to fetch comments for album 123: invalid option", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
@@ -40,9 +41,10 @@ class TestAlbumCommentsScript(unittest.TestCase):
                 patch.object(album_comments, "parse_args", return_value=args),
                 patch.object(album_comments, "JmcomicService", return_value=service),
                 redirect_stderr(stderr),
-                self.assertRaisesRegex(SystemExit, "1"),
+                self.assertRaises(SystemExit) as exit_context,
             ):
                 album_comments.main()
+            self.assertEqual(1, exit_context.exception.code)
 
             self.assertIn(f"failed to export comments to {output_directory}", stderr.getvalue())
             self.assertNotIn("Traceback", stderr.getvalue())

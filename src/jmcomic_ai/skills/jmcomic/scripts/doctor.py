@@ -70,7 +70,8 @@ def check_network():
     print("📡 Fetching latest domain list from the JMComic publish page...")
     try:
         discovered_domains = set(JmModuleConfig.get_html_domain_all())
-    except Exception:
+    except Exception as exc:
+        print(f"❌ Domain discovery failed: {exc}")
         discovered_domains = set()
 
     telegram_links = {domain for domain in discovered_domains if is_telegram_link(domain)}

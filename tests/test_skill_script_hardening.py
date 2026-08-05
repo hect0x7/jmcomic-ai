@@ -138,6 +138,24 @@ class TestDoctorDomainFiltering(unittest.TestCase):
 
         self.assertCountEqual(tested_domains, ["18comic.vip", "jm-88.cc/ZNPJam"])
 
+    def test_network_check_reports_domain_discovery_error(self):
+        import jmcomic
+
+        with (
+            patch.object(
+                jmcomic.JmModuleConfig,
+                "get_html_domain_all",
+                side_effect=RuntimeError("publish page unavailable"),
+            ),
+            patch.object(jmcomic.JmOption, "default", return_value=Mock()),
+            patch.object(jmcomic, "disable_jm_log"),
+            patch("builtins.print") as print_mock,
+        ):
+            self.assertFalse(doctor.check_network())
+
+        output = "\n".join(" ".join(map(str, call.args)) for call in print_mock.call_args_list)
+        self.assertIn("Domain discovery failed: publish page unavailable", output)
+
 
 if __name__ == "__main__":
     unittest.main()

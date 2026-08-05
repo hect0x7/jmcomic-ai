@@ -1,6 +1,4 @@
 import json
-import locale
-import os
 from enum import Enum
 from pathlib import Path
 
@@ -115,37 +113,11 @@ skills_app = typer.Typer(name="skills", help="Manage generic skills resources", 
 app.add_typer(skills_app, name="skills")
 
 
-def _resolve_skill_language(language: str | None = None) -> str:
-    """Resolve zh/en from an explicit option, environment, or system locale."""
-    is_explicit = language is not None
-    locale_value = language or (
-        os.environ.get("JMAI_LANG")
-        or os.environ.get("LC_ALL")
-        or os.environ.get("LC_MESSAGES")
-        or os.environ.get("LANG")
-        or locale.getlocale()[0]
-        or "en"
-    )
-    normalized = locale_value.lower().replace("-", "_")
-    if normalized.startswith("zh"):
-        return "zh"
-    if normalized.startswith(("en", "c.")) or normalized in {"c", "posix"}:
-        return "en"
-    if is_explicit:
-        raise typer.BadParameter("Supported languages: zh, en", param_hint="--lang")
-    return "en"
-
-
-def _skill_text(language: str, english: str, chinese: str) -> str:
-    return chinese if language == "zh" else english
-
-
 @skills_app.callback(invoke_without_command=True)
 def skills_shortcuts(
         ctx: typer.Context,
         install_shortcut: bool = typer.Option(False, "--install", "-i", help="Interactive skill installation"),
         uninstall_shortcut: bool = typer.Option(False, "--uninstall", "-u", help="Interactive skill uninstallation"),
-        language: str | None = typer.Option(None, "--lang", help="Interface language: zh or en", envvar="JMAI_LANG"),
 ):
     """Use -i/-u as shortcuts for the install/uninstall subcommands."""
     if ctx.invoked_subcommand is not None:
@@ -153,12 +125,12 @@ def skills_shortcuts(
     if install_shortcut and uninstall_shortcut:
         raise typer.BadParameter("Choose either --install/-i or --uninstall/-u, not both")
     if install_shortcut:
-        install_skills(target_dir=None, platform=None, force=False, yes=False, language=language)
+        install_skills(target_dir=None, platform=None, force=False, yes=False)
     elif uninstall_shortcut:
-        uninstall_skills(target_dir=None, platform=None, yes=False, language=language)
+        uninstall_skills(target_dir=None, platform=None, yes=False)
 
 
-def _prompt_skill_platform(action: str, language: str) -> str:
+def _prompt_skill_platform(action: str) -> str:
     """Prompt for a supported Agent Skills platform."""
     choices = {
         "1": "claude",
@@ -170,28 +142,18 @@ def _prompt_skill_platform(action: str, language: str) -> str:
         "gemini": "gemini",
         "all": "all",
     }
-    action_text = _skill_text(language, action, "安装" if action == "install" else "卸载")
-    heading = _skill_text(
-        language,
-        f"Select platforms to {action_text} the jmcomic skill:",
-        f"请选择要{action_text} jmcomic Skill 的平台：",
-    )
-    typer.secho(f"\n{heading}", fg=typer.colors.BRIGHT_CYAN, bold=True)
+    typer.secho(f"\nSelect platforms to {action} the jmcomic skill:", fg=typer.colors.BRIGHT_CYAN, bold=True)
     typer.echo("  1. Claude")
     typer.echo("  2. Codex")
     typer.echo("  3. Gemini CLI")
-    typer.echo(f"  4. {_skill_text(language, 'All platforms', '全部平台')}")
+    typer.echo("  4. All platforms")
 
     while True:
-        selection = typer.prompt(_skill_text(language, "Platform", "平台"), default="4").strip().lower()
+        selection = typer.prompt("Platform", default="4").strip().lower()
         if selection in choices:
             return choices[selection]
         typer.secho(
-            _skill_text(
-                language,
-                "Invalid selection. Enter 1-4 or claude/codex/gemini/all.",
-                "选择无效，请输入 1-4 或 claude/codex/gemini/all。",
-            ),
+            "Invalid selection. Enter 1-4 or claude/codex/gemini/all.",
             fg=typer.colors.RED,
         )
 
@@ -206,72 +168,47 @@ def install_skills(
         ),
         force: bool = typer.Option(False, "--force", "-f", help="Force overwrite existing files"),
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
-        language: str | None = typer.Option(None, "--lang", help="Interface language: zh or en", envvar="JMAI_LANG"),
 ):
     """
     Install built-in skill definitions (SKILL.md, etc.) to a directory.
     """
     from jmcomic_ai.skills.manager import SkillManager
 
-    language = _resolve_skill_language(language)
     manager = SkillManager()
 
     if target_dir is not None:
         target_dirs = {"custom": target_dir.resolve()}
-        typer.echo(
-            _skill_text(
-                language,
-                f"[*] Target parent directory: {target_dirs['custom']}",
-                f"[*] 目标父目录：{target_dirs['custom']}",
-            )
-        )
+        typer.echo(f"[*] Target parent directory: {target_dirs['custom']}")
     else:
-        selected_platform = platform or ("claude" if yes else _prompt_skill_platform("install", language))
+        selected_platform = platform or ("claude" if yes else _prompt_skill_platform("install"))
         try:
             target_dirs = manager.get_platform_target_dirs(selected_platform)
         except ValueError as error:
             raise typer.BadParameter(str(error), param_hint="--platform") from error
+        typer.secho(f"[*] Installing for platform selection: {selected_platform}", fg=typer.colors.CYAN)
         typer.secho(
-            _skill_text(
-                language,
-                f"[*] Installing for platform selection: {selected_platform}",
-                f"[*] 正在为所选平台准备安装：{selected_platform}",
-            ),
-            fg=typer.colors.CYAN,
-        )
-        typer.secho(
-            _skill_text(
-                language,
-                "[*] Hint: Pass a custom PATH to override platform directories",
-                "[*] 提示：传入自定义 PATH 可覆盖平台默认目录",
-            ),
+            "[*] Hint: Pass a custom PATH to override platform directories",
             fg=typer.colors.CYAN,
         )
 
     # 1. Preview
     typer.secho(
-        f"\n{_skill_text(language, '[ Installation Structure Preview ]', '[ 安装结构预览 ]')}",
+        "\n[ Installation Structure Preview ]",
         fg=typer.colors.BRIGHT_MAGENTA,
         bold=True,
     )
     for platform_name, platform_target_dir in target_dirs.items():
         preview = manager.get_install_preview(platform_target_dir)
-        typer.echo(
-            _skill_text(
-                language,
-                f"[{platform_name}] Target Directory: {preview['skill_target_dir']}",
-                f"[{platform_name}] 目标目录：{preview['skill_target_dir']}",
-            )
-        )
-        typer.echo(_skill_text(language, "File Tree:", "文件列表："))
+        typer.echo(f"[{platform_name}] Target Directory: {preview['skill_target_dir']}")
+        typer.echo("File Tree:")
         for file_path in preview["files"]:
             typer.echo(f"  - {file_path}")
     typer.echo("")
 
     # 2. Confirmation (unless -y is passed)
     if not yes:
-        if not typer.confirm(_skill_text(language, "Proceed with installation?", "确认安装？"), default=True):
-            typer.echo(_skill_text(language, "Installation cancelled.", "已取消安装。"))
+        if not typer.confirm("Proceed with installation?", default=True):
+            typer.echo("Installation cancelled.")
             return
 
     installed_platforms = []
@@ -281,36 +218,18 @@ def install_skills(
         if force:
             manager.install(platform_target_dir, overwrite=True)
         elif manager.has_conflicts(platform_target_dir):
-            typer.echo(
-                _skill_text(
-                    language,
-                    f"Warning: Some skill files already exist for {platform_name}.",
-                    f"警告：{platform_name} 已存在部分 Skill 文件。",
-                )
-            )
-            if yes or typer.confirm(
-                _skill_text(
-                    language,
-                    f"Overwrite existing files for {platform_name}?",
-                    f"是否覆盖 {platform_name} 的现有文件？",
-                )
-            ):
+            typer.echo(f"Warning: Some skill files already exist for {platform_name}.")
+            if yes or typer.confirm(f"Overwrite existing files for {platform_name}?"):
                 manager.install(platform_target_dir, overwrite=True)
             else:
-                typer.echo(_skill_text(language, "Skipping existing files.", "已跳过现有文件。"))
+                typer.echo("Skipping existing files.")
                 manager.install(platform_target_dir, overwrite=False)
         else:
             manager.install(platform_target_dir)
         installed_platforms.append(platform_name)
 
     platforms_text = ", ".join(installed_platforms)
-    typer.echo(
-        _skill_text(
-            language,
-            f"Skills installed successfully for: {platforms_text}",
-            f"Skill 安装成功，平台：{platforms_text}",
-        )
-    )
+    typer.echo(f"Skills installed successfully for: {platforms_text}")
 
 
 @skills_app.command("uninstall")
@@ -322,39 +241,24 @@ def uninstall_skills(
             None, "--platform", "-p", help="Target platform: claude, codex, gemini, or all"
         ),
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
-        language: str | None = typer.Option(None, "--lang", help="Interface language: zh or en", envvar="JMAI_LANG"),
 ):
     """
     Uninstall skills from the directory.
     """
     from jmcomic_ai.skills.manager import SkillManager
 
-    language = _resolve_skill_language(language)
     manager = SkillManager()
 
     if target_dir is not None:
         target_dirs = {"custom": target_dir.resolve()}
-        typer.echo(
-            _skill_text(
-                language,
-                f"[*] Uninstalling from: {target_dirs['custom']}",
-                f"[*] 卸载目标：{target_dirs['custom']}",
-            )
-        )
+        typer.echo(f"[*] Uninstalling from: {target_dirs['custom']}")
     else:
-        selected_platform = platform or ("claude" if yes else _prompt_skill_platform("uninstall", language))
+        selected_platform = platform or ("claude" if yes else _prompt_skill_platform("uninstall"))
         try:
             target_dirs = manager.get_platform_target_dirs(selected_platform)
         except ValueError as error:
             raise typer.BadParameter(str(error), param_hint="--platform") from error
-        typer.secho(
-            _skill_text(
-                language,
-                f"[*] Uninstalling for platform selection: {selected_platform}",
-                f"[*] 正在为所选平台准备卸载：{selected_platform}",
-            ),
-            fg=typer.colors.YELLOW,
-        )
+        typer.secho(f"[*] Uninstalling for platform selection: {selected_platform}", fg=typer.colors.YELLOW)
 
     # 1. Preview
     previews = {
@@ -364,13 +268,8 @@ def uninstall_skills(
     symlink_previews = {name: preview for name, preview in previews.items() if preview["is_symlink"]}
     for preview in symlink_previews.values():
         typer.secho(
-            _skill_text(
-                language,
-                f"[*] Skipped externally managed skill symlink: {preview['skill_target_dir']} "
-                f"-> {preview['link_target']}. Nothing was changed; remove the link manually if intended.",
-                f"[*] 已跳过外部管理的 Skill 软链接：{preview['skill_target_dir']} -> {preview['link_target']}。"
-                "未做任何修改；如需删除，请手动处理。",
-            ),
+            f"[*] Skipped externally managed skill symlink: {preview['skill_target_dir']} "
+            f"-> {preview['link_target']}. Nothing was changed; remove the link manually if intended.",
             fg=typer.colors.YELLOW,
         )
 
@@ -379,53 +278,32 @@ def uninstall_skills(
     }
     if not existing_previews:
         typer.secho(
-            _skill_text(
-                language,
-                "[*] Skipped: No removable jmcomic skill directory found for the selected targets",
-                "[*] 已跳过：所选目标中没有可卸载的 jmcomic Skill 目录",
-            ),
+            "[*] Skipped: No removable jmcomic skill directory found for the selected targets",
             fg=typer.colors.YELLOW,
         )
         return
 
     typer.secho(
-        f"\n{_skill_text(language, '[ Uninstallation Preview ]', '[ 卸载预览 ]')}",
+        "\n[ Uninstallation Preview ]",
         fg=typer.colors.BRIGHT_RED,
         bold=True,
     )
     typer.secho(
-        _skill_text(language, "THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:", "以下目录和文件将被删除："),
+        "THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:",
         fg=typer.colors.RED,
     )
     for platform_name, preview in existing_previews.items():
-        typer.echo(
-            _skill_text(
-                language,
-                f"[{platform_name}] Path: {preview['skill_target_dir']}",
-                f"[{platform_name}] 路径：{preview['skill_target_dir']}",
-            )
-        )
-        typer.echo(_skill_text(language, "File Tree:", "文件列表："))
+        typer.echo(f"[{platform_name}] Path: {preview['skill_target_dir']}")
+        typer.echo("File Tree:")
         for file_path in preview["files"]:
             typer.echo(f"  - {file_path}")
 
-    typer.echo(
-        "\n"
-        + _skill_text(
-            language,
-            "Only the specific skill folder (jmcomic) will be removed. Your other skills remain safe.",
-            "只会删除 jmcomic Skill 目录，其他 Skill 不受影响。",
-        )
-    )
+    typer.echo("\nOnly the specific skill folder (jmcomic) will be removed. Your other skills remain safe.")
     typer.echo("")
 
     # 2. Confirmation
     if yes or typer.confirm(
-        _skill_text(
-            language,
-            "Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?",
-            "确认永久删除 jmcomic Skill 目录？",
-        ),
+        "Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?",
         default=False,
     ):
         uninstalled_platforms = []
@@ -433,13 +311,7 @@ def uninstall_skills(
             if manager.uninstall(preview["target_dir"]):
                 uninstalled_platforms.append(platform_name)
         platforms_text = ", ".join(uninstalled_platforms)
-        typer.echo(
-            _skill_text(
-                language,
-                f"Skills uninstalled successfully for: {platforms_text}",
-                f"Skill 卸载成功，平台：{platforms_text}",
-            )
-        )
+        typer.echo(f"Skills uninstalled successfully for: {platforms_text}")
 
 
 # Option group

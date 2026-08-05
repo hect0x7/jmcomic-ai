@@ -100,26 +100,36 @@ class TestSkillPlatformCli(unittest.TestCase):
 
                 uninstall_result = self.runner.invoke(
                     app,
-                    ["skills", "uninstall", "--platform", "all", "--yes", "--lang", "zh"],
+                    ["skills", "uninstall", "--platform", "all", "--yes"],
                 )
 
                 self.assertEqual(0, uninstall_result.exit_code, uninstall_result.output)
-                self.assertIn("Skill 卸载成功", uninstall_result.output)
+                self.assertIn("Skills uninstalled successfully", uninstall_result.output)
                 for target_dir in SkillManager.get_platform_target_dirs("all", home_dir).values():
                     self.assertFalse((target_dir / "jmcomic").exists())
 
-    def test_install_prompt_supports_chinese(self):
+    def test_install_prompt_uses_english(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             result = self.runner.invoke(
                 app,
-                ["skills", "install", temp_dir, "--lang", "zh"],
+                ["skills", "install", temp_dir],
                 input="n\n",
             )
 
             self.assertEqual(0, result.exit_code, result.output)
-            self.assertIn("安装结构预览", result.output)
-            self.assertIn("确认安装", result.output)
-            self.assertIn("已取消安装", result.output)
+            self.assertIn("Installation Structure Preview", result.output)
+            self.assertIn("Proceed with installation", result.output)
+            self.assertIn("Installation cancelled", result.output)
+
+    def test_manual_language_controls_are_not_supported(self):
+        help_result = self.runner.invoke(app, ["skills", "install", "--help"])
+        self.assertEqual(0, help_result.exit_code, help_result.output)
+        self.assertNotIn("--lang", help_result.output)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            option_result = self.runner.invoke(app, ["skills", "install", temp_dir, "--lang", "zh"])
+            self.assertNotEqual(0, option_result.exit_code)
+            self.assertIn("No such option", option_result.output)
 
 
 class TestSkillManagerSafety(unittest.TestCase):
@@ -160,11 +170,11 @@ class TestSkillManagerSafety(unittest.TestCase):
 
             result = CliRunner().invoke(
                 app,
-                ["skills", "uninstall", str(target_dir), "--yes", "--lang", "zh"],
+                ["skills", "uninstall", str(target_dir), "--yes"],
             )
 
             self.assertEqual(0, result.exit_code, result.output)
-            self.assertIn("已跳过外部管理的 Skill 软链接", result.output)
+            self.assertIn("Skipped externally managed skill symlink", result.output)
             self.assertTrue(skill_link.is_symlink())
             self.assertTrue(source_file.is_file())
 
