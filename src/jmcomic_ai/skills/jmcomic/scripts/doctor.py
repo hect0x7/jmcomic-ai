@@ -9,6 +9,18 @@ Usage:
 
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
+
+try:
+    from ._script_utils import import_error_message
+except ImportError:
+    from _script_utils import import_error_message  # type: ignore[no-redef]
+
+
+def is_telegram_link(value: str) -> bool:
+    """Return whether a discovered value points to Telegram rather than JMComic."""
+    parsed = urlsplit(value if "://" in value else f"//{value}")
+    return parsed.hostname == "t.me"
 
 
 def check_python_version():
@@ -17,19 +29,24 @@ def check_python_version():
 
 def check_dependencies():
     print("📦 Checking dependencies...")
+    success = True
     try:
         import jmcomic
 
         print(f"✅ jmcomic version: {jmcomic.__version__}")
-    except ImportError:
-        print("❌ Error: jmcomic library not found.")
+    except ImportError as exc:
+        print(f"❌ {import_error_message(exc, 'jmcomic', 'Please install: pip install jmcomic')}")
+        success = False
 
     try:
         from jmcomic_ai.core import JmcomicService  # noqa: F401
 
         print("✅ jmcomic_ai core is accessible.")
-    except ImportError:
-        print("❌ Error: jmcomic_ai core not found.")
+    except ImportError as exc:
+        print(f"❌ {import_error_message(exc, 'jmcomic_ai', 'Please ensure the package is installed.')}")
+        success = False
+
+    return success
 
 
 def check_network():
@@ -40,9 +57,9 @@ def check_network():
     print("🌐 Checking network connectivity (Dynamic Domain Discovery)...")
     try:
         from jmcomic import JmModuleConfig, JmOption, disable_jm_log, multi_thread_launcher
-    except ImportError:
-        print("❌ Error: Missing jmcomic dependencies.")
-        return
+    except ImportError as exc:
+        print(f"❌ {import_error_message(exc, 'jmcomic', 'Please install: pip install jmcomic')}")
+        return False
 
     # 禁用 jmcomic 的冗余日志输出
     disable_jm_log()
@@ -52,13 +69,20 @@ def check_network():
     # 1. 获取所有域名
     print("📡 Fetching latest domain list from the JMComic publish page...")
     try:
-        domain_set = set(JmModuleConfig.get_html_domain_all())
-    except Exception:
-        domain_set = set()
+        discovered_domains = set(JmModuleConfig.get_html_domain_all())
+    except Exception as exc:
+        print(f"❌ Domain discovery failed: {exc}")
+        discovered_domains = set()
+
+    telegram_links = {domain for domain in discovered_domains if is_telegram_link(domain)}
+    domain_set = discovered_domains - telegram_links
+
+    if telegram_links:
+        print(f"ℹ️ Ignored {len(telegram_links)} Telegram publish link(s).")
 
     if not domain_set:
         print("❌ Failed to discover domains from the JMComic publish page. You might need to configure a proxy.")
-        return
+        return False
 
     print(f"🔍 Discovered {len(domain_set)} domains. Testing business connectivity...")
 
@@ -108,6 +132,8 @@ def check_network():
     else:
         print("❌ All discovered domains failed. You likely need to configure a proxy.")
 
+    return bool(ok_domains)
+
 
 def check_config():
     print("⚙️ Checking configuration...")
@@ -122,12 +148,15 @@ def main():
     print("🏥 JMComic Skill Doctor - Diagnostic Report\n" + "=" * 45)
     check_python_version()
     print("-" * 20)
-    check_dependencies()
+    dependencies_ok = check_dependencies()
     print("-" * 20)
     check_config()
     print("-" * 20)
-    check_network()
+    network_ok = check_network()
     print("=" * 45 + "\n✨ Diagnostic complete.")
+
+    if not dependencies_ok or not network_ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

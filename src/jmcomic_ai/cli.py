@@ -152,7 +152,10 @@ def _prompt_skill_platform(action: str) -> str:
         selection = typer.prompt("Platform", default="4").strip().lower()
         if selection in choices:
             return choices[selection]
-        typer.secho("Invalid selection. Enter 1-4 or claude/codex/gemini/all.", fg=typer.colors.RED)
+        typer.secho(
+            "Invalid selection. Enter 1-4 or claude/codex/gemini/all.",
+            fg=typer.colors.RED,
+        )
 
 
 @skills_app.command("install")
@@ -183,10 +186,17 @@ def install_skills(
         except ValueError as error:
             raise typer.BadParameter(str(error), param_hint="--platform") from error
         typer.secho(f"[*] Installing for platform selection: {selected_platform}", fg=typer.colors.CYAN)
-        typer.secho("[*] Hint: Pass a custom PATH to override platform directories", fg=typer.colors.CYAN)
+        typer.secho(
+            "[*] Hint: Pass a custom PATH to override platform directories",
+            fg=typer.colors.CYAN,
+        )
 
     # 1. Preview
-    typer.secho("\n[ Installation Structure Preview ]", fg=typer.colors.BRIGHT_MAGENTA, bold=True)
+    typer.secho(
+        "\n[ Installation Structure Preview ]",
+        fg=typer.colors.BRIGHT_MAGENTA,
+        bold=True,
+    )
     for platform_name, platform_target_dir in target_dirs.items():
         preview = manager.get_install_preview(platform_target_dir)
         typer.echo(f"[{platform_name}] Target Directory: {preview['skill_target_dir']}")
@@ -218,7 +228,8 @@ def install_skills(
             manager.install(platform_target_dir)
         installed_platforms.append(platform_name)
 
-    typer.echo(f"Skills installed successfully for: {', '.join(installed_platforms)}")
+    platforms_text = ", ".join(installed_platforms)
+    typer.echo(f"Skills installed successfully for: {platforms_text}")
 
 
 @skills_app.command("uninstall")
@@ -254,13 +265,33 @@ def uninstall_skills(
         platform_name: manager.get_uninstall_preview(platform_target_dir)
         for platform_name, platform_target_dir in target_dirs.items()
     }
-    existing_previews = {name: preview for name, preview in previews.items() if preview["exists"]}
+    symlink_previews = {name: preview for name, preview in previews.items() if preview["is_symlink"]}
+    for preview in symlink_previews.values():
+        typer.secho(
+            f"[*] Skipped externally managed skill symlink: {preview['skill_target_dir']} "
+            f"-> {preview['link_target']}. Nothing was changed; remove the link manually if intended.",
+            fg=typer.colors.YELLOW,
+        )
+
+    existing_previews = {
+        name: preview for name, preview in previews.items() if preview["exists"] and not preview["is_symlink"]
+    }
     if not existing_previews:
-        typer.secho("[*] Skipped: No jmcomic skill directory found for the selected targets", fg=typer.colors.YELLOW)
+        typer.secho(
+            "[*] Skipped: No removable jmcomic skill directory found for the selected targets",
+            fg=typer.colors.YELLOW,
+        )
         return
 
-    typer.secho("\n[ Uninstallation Preview ]", fg=typer.colors.BRIGHT_RED, bold=True)
-    typer.secho("THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:", fg=typer.colors.RED)
+    typer.secho(
+        "\n[ Uninstallation Preview ]",
+        fg=typer.colors.BRIGHT_RED,
+        bold=True,
+    )
+    typer.secho(
+        "THE FOLLOWING DIRECTORY AND FILES WILL BE DELETED:",
+        fg=typer.colors.RED,
+    )
     for platform_name, preview in existing_previews.items():
         typer.echo(f"[{platform_name}] Path: {preview['skill_target_dir']}")
         typer.echo("File Tree:")
@@ -271,12 +302,16 @@ def uninstall_skills(
     typer.echo("")
 
     # 2. Confirmation
-    if yes or typer.confirm("Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?", default=False):
+    if yes or typer.confirm(
+        "Are you sure you want to PERMANENTLY DELETE the 'jmcomic' skill folder?",
+        default=False,
+    ):
         uninstalled_platforms = []
         for platform_name, preview in existing_previews.items():
             if manager.uninstall(preview["target_dir"]):
                 uninstalled_platforms.append(platform_name)
-        typer.echo(f"Skills uninstalled successfully for: {', '.join(uninstalled_platforms)}")
+        platforms_text = ", ".join(uninstalled_platforms)
+        typer.echo(f"Skills uninstalled successfully for: {platforms_text}")
 
 
 # Option group

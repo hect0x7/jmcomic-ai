@@ -104,8 +104,79 @@ class TestSkillPlatformCli(unittest.TestCase):
                 )
 
                 self.assertEqual(0, uninstall_result.exit_code, uninstall_result.output)
+                self.assertIn("Skills uninstalled successfully", uninstall_result.output)
                 for target_dir in SkillManager.get_platform_target_dirs("all", home_dir).values():
                     self.assertFalse((target_dir / "jmcomic").exists())
+
+    def test_install_prompt_uses_english(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = self.runner.invoke(
+                app,
+                ["skills", "install", temp_dir],
+                input="n\n",
+            )
+
+            self.assertEqual(0, result.exit_code, result.output)
+            self.assertIn("Installation Structure Preview", result.output)
+            self.assertIn("Proceed with installation", result.output)
+            self.assertIn("Installation cancelled", result.output)
+
+    def test_manual_language_controls_are_not_supported(self):
+        help_result = self.runner.invoke(app, ["skills", "install", "--help"])
+        self.assertEqual(0, help_result.exit_code, help_result.output)
+        self.assertNotIn("--lang", help_result.output)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            option_result = self.runner.invoke(app, ["skills", "install", temp_dir, "--lang", "zh"])
+            self.assertNotEqual(0, option_result.exit_code)
+            self.assertIn("No such option", option_result.output)
+
+
+class TestSkillManagerSafety(unittest.TestCase):
+    def test_uninstalling_symlink_preserves_source_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source" / "jmcomic"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "SKILL.md"
+            source_file.write_text("source content", encoding="utf-8")
+
+            target_dir = temp_path / "target"
+            target_dir.mkdir()
+            skill_link = target_dir / "jmcomic"
+            skill_link.symlink_to(source_dir, target_is_directory=True)
+
+            manager = SkillManager()
+            manager.skills_source_dir = source_dir
+            manager.skill_name = "jmcomic"
+
+            self.assertFalse(manager.uninstall(target_dir))
+            self.assertTrue(skill_link.is_symlink())
+            self.assertTrue(source_file.is_file())
+            self.assertEqual("source content", source_file.read_text(encoding="utf-8"))
+
+    def test_cli_warns_and_skips_symlink(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source" / "jmcomic"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "SKILL.md"
+            source_file.write_text("source content", encoding="utf-8")
+
+            target_dir = temp_path / "target"
+            target_dir.mkdir()
+            skill_link = target_dir / "jmcomic"
+            skill_link.symlink_to(source_dir, target_is_directory=True)
+
+            result = CliRunner().invoke(
+                app,
+                ["skills", "uninstall", str(target_dir), "--yes"],
+            )
+
+            self.assertEqual(0, result.exit_code, result.output)
+            self.assertIn("Skipped externally managed skill symlink", result.output)
+            self.assertTrue(skill_link.is_symlink())
+            self.assertTrue(source_file.is_file())
 
 
 if __name__ == "__main__":

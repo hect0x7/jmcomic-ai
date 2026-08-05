@@ -21,10 +21,14 @@ import sys
 from pathlib import Path
 
 try:
-    from jmcomic_ai.core import JmcomicService
+    from ._script_utils import exit_for_import_error
 except ImportError:
-    print("❌ Error: jmcomic_ai not found. Please ensure the package is installed.")
-    sys.exit(1)
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
+    from jmcomic_ai.core import JmcomicService
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic_ai", "Please ensure the package is installed.")
 
 
 def parse_args():
@@ -87,9 +91,17 @@ def export_to_csv(results: list[dict], output_path: Path):
         print("⚠️ No results to export")
         return
 
+    core_fields = ["id", "title", "tags", "cover_url"]
+    extra_fields = [
+        key
+        for result in results
+        for key in result
+        if key not in core_fields
+    ]
+    fieldnames = [*core_fields, *dict.fromkeys(extra_fields)]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-        # Use first result to determine fields
-        fieldnames = ["id", "title", "tags", "cover_url"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         writer.writeheader()
@@ -104,6 +116,7 @@ def export_to_csv(results: list[dict], output_path: Path):
 
 def export_to_json(results: list[dict], output_path: Path):
     """Export results to JSON format"""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 

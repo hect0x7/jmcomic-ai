@@ -14,10 +14,14 @@ import sys
 from pathlib import Path
 
 try:
-    from jmcomic import JmOption, create_option_by_file
+    from ._script_utils import exit_for_import_error
 except ImportError:
-    print("❌ Error: jmcomic not found. Please install: pip install jmcomic")
-    sys.exit(1)
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
+    from jmcomic import JmOption, create_option_by_file
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic", "Please install: pip install jmcomic")
 
 
 def parse_args():
@@ -61,6 +65,7 @@ def convert_to_json(option: JmOption, output_path: Path):
     """Convert JmOption to JSON format"""
     try:
         option_dict = option.deconstruct()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(option_dict, f, indent=2, ensure_ascii=False)
         return True, ""
@@ -88,7 +93,7 @@ def print_config_summary(option: JmOption):
     # Directory settings
     print("\n📂 Directory:")
     print(f"  - Base dir: {option.dir_rule.base_dir}")
-    print(f"  - Rule: {option.dir_rule.get('rule', 'Bd / Ptitle')}")
+    print(f"  - Rule: {option.dir_rule.rule_dsl}")
 
     # Proxy settings
     postman_meta = option.client.get('postman', {}).get('meta_data', {})

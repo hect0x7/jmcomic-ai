@@ -7,17 +7,14 @@ import sys
 from pathlib import Path
 
 try:
+    from ._script_utils import exit_for_import_error
+except ImportError:
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
     from jmcomic_ai.core import JmcomicService
 except ImportError as exc:
-    missing_module = getattr(exc, "name", None)
-    if isinstance(exc, ModuleNotFoundError) and missing_module == "jmcomic_ai":
-        message = "Error: jmcomic_ai not found. Please ensure the package is installed."
-    elif isinstance(exc, ModuleNotFoundError) and missing_module:
-        message = f"Error: failed to load jmcomic_ai because dependency '{missing_module}' is unavailable."
-    else:
-        message = f"Error: failed to import JmcomicService: {exc}"
-    print(message, file=sys.stderr)
-    sys.exit(1)
+    exit_for_import_error(exc, "jmcomic_ai", "Please ensure the package is installed.")
 
 
 def parse_args():

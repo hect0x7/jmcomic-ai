@@ -930,13 +930,14 @@ class JmcomicService:
         )
         return result
 
-    def download_cover(self, album_id: str) -> str:
+    def download_cover(self, album_id: str, output_dir: str | None = None) -> str:
         """
         下载特定本子的封面图片。
-        封面将保存到默认下载目录下的 'covers' 子目录中。
+        默认保存到下载目录下的 'covers' 子目录，也可以指定输出目录。
 
         参数:
             album_id: 本子 ID (例如 "123456")
+            output_dir: 可选的封面输出目录；省略时使用默认的 'covers' 子目录。
 
         返回:
             包含保存路径的成功消息。
@@ -945,8 +946,7 @@ class JmcomicService:
         # Verify album exists
         client.get_album_detail(album_id)
 
-        # 使用 .base_dir 属性而非 .get() 方法
-        cover_dir = Path(self.option.dir_rule.base_dir) / "covers"
+        cover_dir = Path(output_dir).expanduser() if output_dir else Path(self.option.dir_rule.base_dir) / "covers"
         cover_dir.mkdir(parents=True, exist_ok=True)
         cover_path = cover_dir / f"{album_id}.jpg"
 

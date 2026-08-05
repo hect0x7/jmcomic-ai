@@ -57,9 +57,9 @@ When asked to add a new feature or tool, follow these steps:
 - Run `uv run python tests/test_mcp_integration.py` (or use `python -m unittest discover tests` for all tests).
 - Ensure the new tool appears in `list_tools`, executes through the intended transport, and keeps stdio stdout valid JSON-RPC.
 
-### 6. Record Changes in Changelog
-- **Critical**: You **MUST** document your changes in `CHANGELOG.md` after every code modification.
-- Add a concise entry under `Unreleased`; move it to the dated version section during release preparation.
+### 6. Record Versioned Changes in Changelog
+- Do not create an `Unreleased` section or placeholder changelog entries before the release version is decided.
+- Once the release version is agreed, document the changes directly under `## [x.y.z] - YYYY-MM-DD` before creating the release commit.
 - Classify your change type: `Added`, `Changed`, `Fixed`, or `Removed`.
 
 ## 📜 Coding Standards for Agents
@@ -93,26 +93,27 @@ When asked to add a new feature or tool, follow these steps:
 
 ## 📌 Version Management
 
-`src/jmcomic_ai/__init__.py` is the only manually maintained package version source. Hatch reads its static `__version__` through `[tool.hatch.version]`, the CLI imports the same value, and the Skill does not carry a package version. Because the project version is dynamic, uv keeps the editable root package in `uv.lock` without duplicating its version. Release commits keep the existing `v{version}: ...` format, and that version must match `__init__.py`.
+`src/jmcomic_ai/__init__.py` is the only manually maintained package version source. Hatch reads its static `__version__` through `[tool.hatch.version]`, the CLI imports the same value, and the Skill does not carry a package version. Because the project version is dynamic, uv keeps the editable root package in `uv.lock` without duplicating its version. Release commits use `v{version}: {summary}`, and that version must match `__init__.py`.
 
 ### Version Validation
 The publish workflow runs `.github/check_version.py` before every release to verify that the `v{version}: ...` commit prefix matches `__init__.py`.
 
 ### Release Commit Convention
-To ensure the automatic release notes generator (`.github/release.py`) works correctly, use the following format for release commits:
+The release commit only triggers publishing and identifies the version. The GitHub Release body is extracted from the matching `CHANGELOG.md` version section by `.github/release.py`.
 
-**Format**: `v{version}: {Update Point 1}; {Update Point 2}; ...`
+**Format**: `v{version}: {summary}`
 
 - **Version**: Must match the current version in `src/jmcomic_ai/__init__.py`.
-- **Description**: Use semicolons (`;`) to separate multiple points. These will be automatically converted into a numbered list in the release notes.
+- **Summary**: May be any concise description; it is not used as the GitHub Release body.
+- **Release body**: Must already exist under the matching `## [x.y.z] - YYYY-MM-DD` heading in `CHANGELOG.md`.
 
 **Example**:
-`v0.0.5: Add file tree preview for skills management; Improve uninstallation safety; Refactor SkillManager to remove redundancy`
+`v0.1.2: Improve Skill scripts and release workflow`
 
 ### Release Preparation Checklist
 - Choose the next semantic version and update only `__version__` in `src/jmcomic_ai/__init__.py`.
 - Run `uv lock` after dependency or project metadata changes.
-- Move release entries from `Unreleased` to `## [x.y.z] - YYYY-MM-DD` in `CHANGELOG.md`.
+- Add the release changes directly under `## [x.y.z] - YYYY-MM-DD` in `CHANGELOG.md`; do not use an `Unreleased` section.
 - Run the full tests, Ruff, MyPy, `jmai --version`, and `uv build`.
 - Use the release commit convention above. The version in the commit becomes the release tag; do not create the tag manually.
 

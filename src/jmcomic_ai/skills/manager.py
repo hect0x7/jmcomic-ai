@@ -66,11 +66,15 @@ class SkillManager:
     def get_uninstall_preview(self, target_dir: Path) -> dict:
         """Return preview info for uninstallation"""
         skill_target_dir = self._get_skill_target_dir(target_dir)
+        is_symlink = skill_target_dir.is_symlink()
+        exists = is_symlink or skill_target_dir.exists()
         return {
             "target_dir": target_dir,
             "skill_target_dir": skill_target_dir,
-            "exists": skill_target_dir.exists(),
-            "files": self._list_removable_files(skill_target_dir) if skill_target_dir.exists() else [],
+            "exists": exists,
+            "is_symlink": is_symlink,
+            "link_target": skill_target_dir.readlink() if is_symlink else None,
+            "files": self._list_removable_files(skill_target_dir) if exists and not is_symlink else [],
         }
 
     def _list_removable_files(self, skill_target_dir: Path) -> list[str]:
@@ -131,6 +135,10 @@ class SkillManager:
     def uninstall(self, target_dir: Path) -> bool:
         """Uninstall skills from target directory. Returns True if subdirectory was found and processed."""
         skill_target_dir = self._get_skill_target_dir(target_dir)
+        if skill_target_dir.is_symlink():
+            print(f"Skipped externally managed skill symlink: {skill_target_dir}. Remove it manually if intended.")
+            return False
+
         if not skill_target_dir.exists():
             return False
 

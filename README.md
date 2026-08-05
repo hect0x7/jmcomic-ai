@@ -111,47 +111,7 @@ uv sync
 
 ### 🏗️ 架构全景：两条独立路线
 
-```mermaid
-graph TB
-    subgraph User["👤 用户"]
-        NL["自然语言指令"]
-    end
-
-    subgraph Host["🖥️ AI 客户端"]
-        Agent["AI Agent"]
-    end
-
-    subgraph JmcomicAI["📦 JMComic AI"]
-        direction TB
-
-        subgraph Route_Skills["🧠 路线 A：Skills + CLI"]
-            SkillMD["SKILL.md\n理解靠文档"]
-            Scripts["scripts/\n动手靠脚本"]
-        end
-
-        subgraph Route_MCP["🔌 路线 B：MCP"]
-            Server["FastMCP Server"]
-            Tools["10 个工具\n理解靠 desc，动手靠调用"]
-            Resources["3 个 Resources"]
-        end
-
-        Core["JmcomicService 核心引擎"]
-    end
-
-    subgraph Upstream["📚 上游库"]
-        JmLib["jmcomic-crawler-python"]
-    end
-
-    NL --> Agent
-    Agent -. "路线 A" .-> SkillMD
-    SkillMD --> Scripts
-    Agent -. "路线 B" .-> Server
-    Server --> Tools
-    Server --> Resources
-    Scripts --> Core
-    Tools --> Core
-    Core --> JmLib
-```
+![JMComic AI 双路线架构](images/architecture-overview.png)
 
 ---
 
@@ -171,6 +131,7 @@ skills/jmcomic/
 │   ├── scripts.md                  # 10 个脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
 └── 📂 scripts/                     # 10 个即用 CLI 脚本
+    ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
     ├── download_photo.py           # 📥 单章下载
@@ -204,7 +165,7 @@ skills/jmcomic/
 |:---|:---|:---|
 | `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
 | `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
-| `download_cover` | 下载封面图片 | 保存至 `covers/` 目录 |
+| `download_cover` | 下载封面图片 | 默认保存至 `covers/`，可用 `output_dir` 指定目录 |
 
 ### 后处理
 
@@ -253,7 +214,9 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     jmai skills install --platform gemini
     jmai skills install --platform all
     ```
+    安装和卸载交互固定使用英文。
     使用 `--yes` 且未指定 `--platform` 时，为保持向后兼容，会默认安装到 Claude。
+    如果目标 `jmcomic` 目录是外部管理的软链接，卸载命令只会提示并跳过，不会删除链接或链接目标。
 2.  各平台用户级安装目录：
     - Claude：`~/.claude/skills/jmcomic`
     - Codex：`~/.agents/skills/jmcomic`
