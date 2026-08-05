@@ -13,7 +13,7 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    if: startsWith(github.event.head_commit.message, 'v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'v')
     steps:
       - uses: actions/checkout@v4
 
@@ -31,11 +31,10 @@ jobs:
         run: |
           python .github/check_version.py
 
-      - name: Parse Tag & Body
+      - name: Build Release Metadata
         id: tb
         run: |
-          commit_message=$(git log --format=%B -n 1 ${{ github.sha }})
-          python .github/release.py "$commit_message"
+          python .github/release.py
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -44,7 +43,6 @@ jobs:
         with:
           tag_name: ${{ steps.tb.outputs.tag }}
           body_path: release_body.txt
-          generate_release_notes: true
 
       - name: Build with uv
         run: |

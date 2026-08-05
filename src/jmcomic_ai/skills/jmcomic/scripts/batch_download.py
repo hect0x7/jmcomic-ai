@@ -14,10 +14,16 @@ import sys
 from pathlib import Path
 
 try:
-    from jmcomic_ai.core import JmcomicService
+    from ._script_utils import exit_for_import_error
 except ImportError:
-    print("❌ Error: jmcomic_ai not found. Please ensure the package is installed.")
-    sys.exit(1)
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
+    from jmcomic import JmcomicText
+
+    from jmcomic_ai.core import JmcomicService
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic_ai", "Please ensure the package is installed.")
 
 
 def parse_args():
@@ -44,7 +50,7 @@ def parse_args():
 def load_album_ids(args) -> list[str]:
     """Load album IDs from command line or file"""
     if args.ids:
-        return [aid.strip() for aid in args.ids.split(",") if aid.strip()]
+        return [JmcomicText.parse_to_jm_id(aid.strip()) for aid in args.ids.split(",") if aid.strip()]
 
     if args.file:
         file_path = Path(args.file)
@@ -53,7 +59,8 @@ def load_album_ids(args) -> list[str]:
             sys.exit(1)
 
         with open(file_path, encoding="utf-8") as f:
-            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+            values = (line.strip() for line in f)
+            return [JmcomicText.parse_to_jm_id(value) for value in values if value and not value.startswith("#")]
 
     return []
 
@@ -86,6 +93,8 @@ async def main():
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for i, (album_id, result) in enumerate(zip(album_ids, results), 1):
+        if isinstance(result, asyncio.CancelledError):
+            raise result
         if isinstance(result, Exception):
             print(f"❌ Failed to download album {album_id}: {result}")
             failed_ids.append(album_id)

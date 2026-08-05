@@ -131,6 +131,7 @@ skills/jmcomic/
 │   ├── scripts.md                  # 10 个脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
 └── 📂 scripts/                     # 10 个即用 CLI 脚本
+    ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
     ├── download_photo.py           # 📥 单章下载
@@ -164,7 +165,7 @@ skills/jmcomic/
 |:---|:---|:---|
 | `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
 | `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
-| `download_cover` | 下载封面图片 | 保存至 `covers/` 目录 |
+| `download_cover` | 下载封面图片 | 默认保存至 `covers/`，可用 `output_dir` 指定目录 |
 
 ### 后处理
 

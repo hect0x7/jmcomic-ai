@@ -14,10 +14,14 @@ import sys
 from pathlib import Path
 
 try:
-    from jmcomic import JmOption, create_option_by_file
+    from ._script_utils import exit_for_import_error
 except ImportError:
-    print("❌ Error: jmcomic not found. Please install: pip install jmcomic")
-    sys.exit(1)
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
+    from jmcomic import JmOption, create_option_by_file
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic", "Please install: pip install jmcomic")
 
 
 def parse_args():

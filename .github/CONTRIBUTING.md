@@ -184,7 +184,7 @@ jmai mcp --help
 ## 发版准备
 
 1. 根据语义化版本确定新版本号；只修改 `src/jmcomic_ai/__init__.py` 的 `__version__`。Hatch 构建和 CLI 都读取该值，Skill 不保存包版本。
-2. 将 `CHANGELOG.md` 的 `Unreleased` 内容归档到 `## [x.y.z] - YYYY-MM-DD`。
+2. 版本号确定后，直接将本次变更写入 `CHANGELOG.md` 的 `## [x.y.z] - YYYY-MM-DD` 段落；不要创建 `Unreleased` 占位段。
 3. 更新锁文件并执行完整验证：
 
    ```bash
@@ -196,7 +196,7 @@ jmai mcp --help
    uv build
    ```
 
-4. 发版提交必须使用 `v{version}: 更新点1; 更新点2` 格式，且版本号与 `src/jmcomic_ai/__init__.py` 一致。提交合并到 `master` 后，该版本号会作为 GitHub Release tag，并发布到 PyPI。
+4. 发版提交使用 `v{version}: release` 格式，且版本号与 `src/jmcomic_ai/__init__.py` 一致。提交只负责触发发布；Actions 从对应的 Changelog 版本段生成 GitHub Release 文案，然后创建同版本 tag 并发布到 PyPI。
 
 ## 提交 Issue
 

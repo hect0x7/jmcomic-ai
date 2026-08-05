@@ -19,10 +19,16 @@ import sys
 from pathlib import Path
 
 try:
-    from jmcomic_ai.core import JmcomicService
+    from ._script_utils import exit_for_import_error
 except ImportError:
-    print("❌ Error: jmcomic_ai not found. Please ensure the package is installed.")
-    sys.exit(1)
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
+    from jmcomic import JmcomicText
+
+    from jmcomic_ai.core import JmcomicService
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic_ai", "Please ensure the package is installed.")
 
 
 def parse_args():
@@ -43,7 +49,7 @@ def parse_args():
 def load_album_ids(args) -> list[str]:
     """Load album IDs from arguments"""
     if args.ids:
-        return [aid.strip() for aid in args.ids.split(",") if aid.strip()]
+        return [JmcomicText.parse_to_jm_id(aid.strip()) for aid in args.ids.split(",") if aid.strip()]
 
     if args.file:
         file_path = Path(args.file)
@@ -52,24 +58,14 @@ def load_album_ids(args) -> list[str]:
             sys.exit(1)
 
         with open(file_path, encoding="utf-8") as f:
-            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+            values = (line.strip() for line in f)
+            return [JmcomicText.parse_to_jm_id(value) for value in values if value and not value.startswith("#")]
 
     return []
 
 
 def download_covers(service: JmcomicService, album_ids: list[str], output_dir: Path) -> tuple[int, list[str]]:
     """Download covers for multiple albums"""
-    if output_dir.name != "covers":
-        raise ValueError(
-            "The current service contract writes to <base_dir>/covers, so --output must point to a directory named 'covers'."
-        )
-
-    # 服务方法 download_cover() 固定写入 <base_dir>/covers/。
-    # CLI 的 --output 即为目标 covers 目录，因此把 base_dir 临时指向其父目录，
-    # 让服务自身决定 covers 子目录（不重写下载逻辑，仍委托 service.download_cover）。
-    original_base_dir = service.option.dir_rule.base_dir
-    service.option.dir_rule.base_dir = str(output_dir.parent)
-
     success_count = 0
     failed_ids = []
 
@@ -77,16 +73,12 @@ def download_covers(service: JmcomicService, album_ids: list[str], output_dir: P
         print(f"[{i}/{len(album_ids)}] Downloading cover for album {album_id}...")
 
         try:
-            # 委托服务方法（= MCP 工具），返回包含保存路径的消息
-            message = service.download_cover(album_id)
+            message = service.download_cover(album_id, output_dir=str(output_dir))
             print(f"✅ {message}")
             success_count += 1
         except Exception as e:
             print(f"❌ Failed: {e}")
             failed_ids.append(album_id)
-
-    # Restore original base_dir
-    service.option.dir_rule.base_dir = original_base_dir
 
     return success_count, failed_ids
 
@@ -101,7 +93,7 @@ def main():
 
     # Determine output directory
     if args.output:
-        output_dir = Path(args.output).resolve()
+        output_dir = Path(args.output).expanduser().resolve()
     else:
         output_dir = Path.cwd() / "covers"
 

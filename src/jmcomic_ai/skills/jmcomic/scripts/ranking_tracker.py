@@ -22,10 +22,14 @@ from datetime import datetime
 from pathlib import Path
 
 try:
-    from jmcomic_ai.core import JmcomicService
+    from ._script_utils import exit_for_import_error
 except ImportError:
-    print("❌ Error: jmcomic_ai not found. Please ensure the package is installed.")
-    sys.exit(1)
+    from _script_utils import exit_for_import_error  # type: ignore[no-redef]
+
+try:
+    from jmcomic_ai.core import JmcomicService
+except ImportError as exc:
+    exit_for_import_error(exc, "jmcomic_ai", "Please ensure the package is installed.")
 
 
 def parse_args():
