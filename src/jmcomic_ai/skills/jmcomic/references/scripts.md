@@ -4,10 +4,12 @@ Full usage details for the utility scripts in the `scripts/` directory. The SKIL
 Command-Line Tools" section summarizes these; this file carries the complete examples and feature
 lists. All tools support the `--help` flag for detailed usage information.
 
-> **Prerequisite**: These scripts import `jmcomic_ai`, so they must run in an environment where the
+> **Prerequisite**: Most scripts import `jmcomic_ai`, so they must run in an environment where the
 > `jmcomic-ai` package is installed (e.g. `pip install jmcomic-ai`, or `uv run python scripts/<name>.py`
 > from a synced checkout). If `jmai` was installed into an isolated venv via `uv tool`/`pipx`, invoke
 > the scripts with that same interpreter, or just use the MCP tools instead.
+
+For APK download and local-reader commands, use `references/ecosystem.md`.
 
 Output file paths follow the current working directory. Export scripts automatically create missing
 parent directories before writing. Commands that finish with any failed item return a non-zero process

@@ -57,7 +57,9 @@
 | 📊 **数据整理** | 搜索结果导出 CSV/JSON、排行榜快照与变化追踪 |
 | ⚙️ **配置与账户** | 动态修改下载配置、配置校验与格式转换、账户登录与 Cookie 持久化 |
 | 🩺 **诊断** | 检查运行环境、配置文件、网络与域名可用性 |
-| 🧠 **Skills + CLI** | 技能手册、10 个配套脚本，以及 `jmai` / `jmcomic-ai` 命令行入口 |
+| 📱 **APK 获取** | 从 `hect0x7/JMComic-APK` 的最新 GitHub Release 下载安卓安装包 |
+| 📖 **本地阅读** | 调用可选的 `jm-view-server`，用电脑或手机浏览器阅读已下载内容 |
+| 🧠 **Skills + CLI** | 技能手册、12 个配套脚本，以及 `jmai` / `jmcomic-ai` 命令行入口 |
 | 🔌 **MCP** | 10 个工具、3 个知识资源，支持 stdio、SSE 与 HTTP 传输 |
 
 ---
@@ -128,9 +130,10 @@ skills/jmcomic/
 │   ├── reference.md                # 配置完整参考
 │   ├── browse_albums.md            # browse_albums 工具详解
 │   ├── post_process.md             # 后处理 dir_rule DSL 详解
-│   ├── scripts.md                  # 10 个脚本的完整使用手册
+│   ├── ecosystem.md                # APK 获取、本地阅读与下载后承接流程
+│   ├── scripts.md                  # 脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
-└── 📂 scripts/                     # 10 个即用 CLI 脚本
+└── 📂 scripts/                     # 12 个即用 CLI 脚本
     ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
@@ -141,8 +144,18 @@ skills/jmcomic/
     ├── download_covers.py          # 🖼️ 批量下载封面
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
-    └── validate_config.py          # ✅ 配置校验与格式转换
+    ├── validate_config.py          # ✅ 配置校验与格式转换
+    ├── download_latest_apk.py      # 📱 下载最新安卓 APK
+    └── start_view_server.py        # 📖 启动本地阅读服务
 ```
+
+### 🔗 生态联动
+
+安装 Skill 后，Agent 还能承接以下自然语言请求：
+
+- “帮我下载最新版禁漫 APK”：从 [`hect0x7/JMComic-APK`](https://github.com/hect0x7/JMComic-APK/releases/latest) 获取最新 Release，校验文件大小和 SHA-256 后返回本地路径，不会自动安装 APK。
+- “帮我启动本地看本”：使用可选依赖 [`jm-view-server`](https://github.com/hect0x7/jm-view-server) 共享指定下载目录；默认仅本机访问，开启手机或局域网访问时必须设置密码。
+- “下载这个本子并打开看”：下载成功后把返回的绝对 `download_path` 直接交给本地阅读服务。仅请求下载时，Agent 只推荐这项后续操作，不会擅自启动服务。
 
 ---
 
