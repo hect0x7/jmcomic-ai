@@ -100,6 +100,18 @@ cd jmcomic-ai
 uv sync
 ```
 
+### 3、更新已安装版本
+
+```bash
+jmai update            # 按当前安装方式更新
+jmai update --dry-run  # 仅显示更新策略，不修改环境
+```
+
+通过 `uv tool install` 安装时，命令会调用 `uv tool upgrade jmcomic-ai`；普通 uv/pip 环境会严格沿用
+原安装器更新当前 Python。无法确认安装器时不会猜测或切换来源。为避免覆盖源码，可编辑安装、普通
+Git/URL 安装及本地归档安装会被拒绝，请按原来源更新；源码仓库应先拉取代码，再运行 `uv sync`。
+Windows 会在当前 `jmai` 进程退出后执行更新，结果写入 `~/.jmcomic-ai/update.log`。
+
 ---
 
 ## 🤔 什么是 Skills / MCP？
@@ -383,6 +395,11 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
     jmai option show      # 查看当前配置内容
     jmai option path      # 查看配置文件路径
     jmai option edit      # 调用编辑器修改配置
+    ```
+*   **自我更新**:
+    ```bash
+    jmai update           # 更新 PyPI/uv tool 安装
+    jmai update --dry-run # 仅检查将使用的更新方式
     ```
 *   **查看帮助**:
     ```bash
