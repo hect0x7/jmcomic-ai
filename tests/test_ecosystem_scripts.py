@@ -87,7 +87,7 @@ class TestStartViewServer(unittest.TestCase):
     def test_local_command_uses_safe_defaults(self):
         command = start_view_server.build_command("jms", Path("/comics"), "127.0.0.1", 8080, None)
         self.assertEqual(
-            ["jms", "/comics", "--host", "127.0.0.1", "--port", "8080", "--no-debug"],
+            ["jms", str(Path("/comics")), "--host", "127.0.0.1", "--port", "8080", "--no-debug"],
             command,
         )
 
