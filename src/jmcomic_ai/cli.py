@@ -109,6 +109,45 @@ def mcp(
         run_server(transport_value, service, host=host, port=port)
 
 
+@app.command("update")
+def update_self(
+        dry_run: bool = typer.Option(False, "--dry-run", help="Show the update strategy without changing anything"),
+):
+    """Update jmcomic-ai using the current installation method."""
+    from jmcomic_ai.updater import UpdateError, detect_update_strategy, format_update_command, run_update
+
+    try:
+        strategy = detect_update_strategy()
+    except UpdateError as error:
+        typer.secho(f"Cannot update jmcomic-ai: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from error
+
+    typer.echo(f"Current version: {__version__}")
+    typer.echo(f"Update method: {strategy.name}")
+    typer.echo(f"Command: {format_update_command(strategy)}")
+    if dry_run:
+        typer.echo("Dry run complete; no changes were made.")
+        return
+
+    try:
+        update_result = run_update(strategy)
+    except (OSError, UpdateError) as error:
+        typer.secho(f"Failed to start the updater: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from error
+
+    if update_result.return_code != 0:
+        typer.secho(f"Update failed with exit code {update_result.return_code}.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(update_result.return_code if 1 <= update_result.return_code <= 255 else 1)
+
+    if update_result.scheduled:
+        typer.secho(
+            "Update scheduled. It will start after jmai exits; see ~/.jmcomic-ai/update.log for the result.",
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho("Update completed. Restart jmai and run `jmai --version` to verify it.", fg=typer.colors.GREEN)
+
+
 skills_app = typer.Typer(name="skills", help="Manage generic skills resources", no_args_is_help=True)
 app.add_typer(skills_app, name="skills")
 

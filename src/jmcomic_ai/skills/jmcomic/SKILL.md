@@ -1,9 +1,6 @@
 ---
 name: jmcomic
-description: Search, browse, inspect comments, and download manga from JMComic (18comic). Use for manga discovery, ranking, comment analysis, downloads, and configuration management.
-license: MIT
-metadata:
-  dependencies: python>=3.10
+description: Search, browse, inspect comments, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
 ---
 
 # JMComic Skill
@@ -20,6 +17,11 @@ Activate this skill when the user wants to:
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
 - Post-process downloaded content (Zip, PDF, LongImage) with **native parameters or `dir_rule`**
+- Download the latest Android APK published by `hect0x7/JMComic-APK`
+- Run `jms --help` to obtain the current upstream options, then invoke `jms` directly for an existing or newly downloaded manga directory
+
+For APK download, local-reader startup, LAN safety, and download-to-read continuation rules, read
+`references/ecosystem.md` before acting.
 
 ### 📥 Download Tools Return Structured Data
 
@@ -207,6 +209,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
 | `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
+| `download_latest_apk.py` | Download the latest APK published by `hect0x7/JMComic-APK`; supports optional `output_dir`, `--force`, and `--json` (run `--help` for current usage). |
 
 ## Script Parameters ↔ MCP Tools Mapping
 
@@ -223,6 +226,7 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
 | `download_photo.py` | `download_photo` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
 | `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
+| `download_latest_apk.py` | None | None | Reads the public `hect0x7/JMComic-APK` GitHub Release API directly. |
 
 ### Mapping Policy
 
@@ -236,6 +240,8 @@ The following table clarifies how script CLI parameters map to MCP tools.
 - **Rate Limiting**: The platform may rate-limit requests; adjust threading if needed
 - **Storage**: Downloads can be large; ensure sufficient disk space
 - **Configuration**: Default config is at `~/.jmcomic/option.yml`
+- **Next action**: After a successful manga download, offer to start the local reader for the returned
+  `download_path`. Start it automatically only when the user also asked to open, read, or view the result.
 
 ## Troubleshooting
 
