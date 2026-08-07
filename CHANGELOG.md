@@ -9,11 +9,11 @@
 
 ### Added
 - 📱 **最新版 APK 获取**：新增 Skills 脚本，从 `hect0x7/JMComic-APK` 的最新 GitHub Release 原子下载单一 APK 资源，并校验发布方提供的文件大小和 SHA-256 摘要。
-- 📖 **本地阅读服务启动**：新增 Skills 脚本，将已下载目录交给可选的 `jm-view-server`；默认仅允许本机访问，局域网访问必须设置密码，并在 dry-run 输出中隐藏密码。
+- 📖 **本地阅读服务衔接**：Agent 先运行 `jms --help` 获取上游当前参数，再直接调用可选的 `jm-view-server`；默认仅允许本机访问，局域网访问必须设置密码。
 
 ### Changed
 - 🔗 **JMComic 生态工作流**：扩展 `jmcomic` Skill 的触发范围和操作说明，支持 APK 下载、本地或手机看本，以及下载成功后推荐或直接衔接阅读服务。
-- 📝 **生态联动文档**：README 和 Skills references 增加 `JMComic-APK`、`jmcomic-ai` 与 `jm-view-server` 的职责边界、自然语言示例和安全约束。
+- 📝 **生态联动文档**：README 和 Skills references 增加 `JMComic-APK`、`jmcomic-ai` 与上游 `jms` 的职责边界、自然语言示例和安全约束。
 
 ## [0.1.2] - 2026-08-05
 

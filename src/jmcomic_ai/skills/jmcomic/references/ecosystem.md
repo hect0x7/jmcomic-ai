@@ -10,6 +10,10 @@ For requests such as "download the latest JMComic APK", run:
 python scripts/download_latest_apk.py /path/to/output --json
 ```
 
+The optional positional `output_dir` defaults to the current directory. Use `--force` to replace an
+existing APK with the same filename, and use `--json` for a machine-readable result. Run
+`python scripts/download_latest_apk.py --help` for the current script parameters.
+
 The script reads the latest public GitHub Release from `hect0x7/JMComic-APK`, creates the output
 directory when needed, downloads its single `.apk` asset atomically, and validates the published size
 and SHA-256 digest when available. It returns the version, source URLs, digest, size, and absolute local
@@ -25,23 +29,11 @@ For requests such as "start a local reader" or "download and open this manga":
 1. Use the successful download result's absolute `download_path`, or a directory supplied by the user.
 2. Check whether `jms` exists. If it is missing, install the optional reader with
    `python -m pip install jm-view-server`, then retry.
-3. Start a computer-only reader by default:
-
-```bash
-python scripts/start_view_server.py "/absolute/download/path"
-```
-
-The command stays in the foreground until stopped. Keep its terminal session running and give the
-reported URL to the user.
-
-For phone or LAN access, require a password and listen on all interfaces:
-
-```bash
-python scripts/start_view_server.py "/absolute/download/path" --host 0.0.0.0 --port 8080 --password "PASSWORD"
-```
-
-Replace the displayed loopback host with the computer's LAN IP when reporting a phone-access URL.
-Do not expose an unprotected reader to the LAN.
+3. Run `jms --help` first and use the options reported by the installed upstream version rather than
+   relying on a `jmcomic-ai` wrapper or a cached parameter list.
+4. Invoke `jms` directly using the installed version's documented syntax. Prefer computer-only access
+   unless the user explicitly requests phone or LAN access, and do not expose an unprotected reader to
+   the network. Keep the foreground command running and report the URL printed by `jms`.
 
 ## Continue After a Download
 

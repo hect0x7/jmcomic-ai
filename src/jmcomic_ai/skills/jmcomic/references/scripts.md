@@ -9,11 +9,40 @@ lists. All tools support the `--help` flag for detailed usage information.
 > from a synced checkout). If `jmai` was installed into an isolated venv via `uv tool`/`pipx`, invoke
 > the scripts with that same interpreter, or just use the MCP tools instead.
 
-For APK download and local-reader commands, use `references/ecosystem.md`.
+The APK helper remains a `jmcomic-ai` script. Local reading is different: run upstream `jms --help`
+first, then invoke `jms` directly as described in `references/ecosystem.md`; there is no
+`jmcomic-ai` reader wrapper.
 
 Output file paths follow the current working directory. Export scripts automatically create missing
 parent directories before writing. Commands that finish with any failed item return a non-zero process
 exit code, so shell scripts and agents can reliably distinguish complete success from partial failure.
+
+## 📱 `download_latest_apk.py` - Latest Android APK
+
+Download the single `.apk` asset from the latest public `hect0x7/JMComic-APK` GitHub Release:
+
+```bash
+# Download to the current directory
+python scripts/download_latest_apk.py
+
+# Select an output directory and return machine-readable JSON
+python scripts/download_latest_apk.py /path/to/output --json
+
+# Replace an existing APK with the same filename
+python scripts/download_latest_apk.py /path/to/output --force
+```
+
+**Parameters**:
+
+| Parameter | Description |
+| :--- | :--- |
+| `output_dir` | Optional download directory; defaults to the current directory. |
+| `--force` | Replace an existing APK with the same filename. |
+| `--json` | Print a machine-readable JSON result. |
+
+The script creates the output directory when needed, downloads atomically, validates the published
+size and SHA-256 digest when available, and reports the release metadata plus absolute local path.
+Run `python scripts/download_latest_apk.py --help` for the current parameters.
 
 ## 🏥 `doctor.py` - Environment Diagnostics
 

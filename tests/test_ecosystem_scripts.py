@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from jmcomic_ai.skills.jmcomic.scripts import download_latest_apk, start_view_server
+from jmcomic_ai.skills.jmcomic.scripts import download_latest_apk
 
 
 class _Response(io.BytesIO):
@@ -81,29 +81,5 @@ class TestDownloadLatestApk(unittest.TestCase):
             ):
                 download_latest_apk.download_apk(asset, Path(temp_dir))
             self.assertEqual([], list(Path(temp_dir).iterdir()))
-
-
-class TestStartViewServer(unittest.TestCase):
-    def test_local_command_uses_safe_defaults(self):
-        command = start_view_server.build_command("jms", Path("/comics"), "127.0.0.1", 8080, None)
-        self.assertEqual(
-            ["jms", str(Path("/comics")), "--host", "127.0.0.1", "--port", "8080", "--no-debug"],
-            command,
-        )
-
-    def test_lan_command_requires_password(self):
-        with self.assertRaisesRegex(ValueError, "password is required"):
-            start_view_server.build_command("jms", Path("/comics"), "0.0.0.0", 8080, None)
-
-    def test_lan_command_includes_password(self):
-        command = start_view_server.build_command("jms", Path("/comics"), "0.0.0.0", 8080, "secret")
-        self.assertEqual(["--password", "secret"], command[-2:])
-
-    def test_redact_command_hides_password(self):
-        command = ["jms", "/comics", "--password", "secret"]
-        self.assertEqual(["jms", "/comics", "--password", "********"], start_view_server.redact_command(command))
-        self.assertEqual("secret", command[-1])
-
-
 if __name__ == "__main__":
     unittest.main()
