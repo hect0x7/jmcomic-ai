@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "jmcomic>=2.7.3,<3.0.0",
+    "jmcomic>=2.7.4,<3.0.0",
     "mcp",
     "typer",
     "watchdog>=6.0.0",

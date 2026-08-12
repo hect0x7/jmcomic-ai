@@ -16,9 +16,9 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from jmcomic import JmAlbumComment, JmAlbumCommentPage, JmcomicClient, JmOption, jm_log, jm_task_context
+from jmcomic import JmAlbumComment, JmAlbumCommentPage, JmcomicClient, JmModuleConfig, JmOption, jm_log, jm_task_context
 
 from jmcomic_ai.core import (
     GLOBAL_LOG_HANDLER_NAME,
@@ -27,6 +27,7 @@ from jmcomic_ai.core import (
     JmcomicService,
     _configure_logger_file_only,
     _get_global_file_handler,
+    _serialize_download_result,
 )
 
 
@@ -114,6 +115,64 @@ class TestJmcomicCompatibility(unittest.TestCase):
         self.assertFalse(schema_client.get("additionalProperties", True))
         self.assertLessEqual(upstream_client_keys, set(schema_client["properties"]))
 
+    def test_option_schema_exposes_upstream_download_progress_plugin(self):
+        project_root = Path(__file__).resolve().parents[1]
+        schema_path = project_root / "src" / "jmcomic_ai" / "skills" / "jmcomic" / "assets" / "option_schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        self.assertIn("download_progress", schema["definitions"]["plugin"]["properties"]["plugin"]["enum"])
+        kwargs = schema["definitions"]["download_progress_plugin"]["allOf"][1]["properties"]["kwargs"]
+        self.assertEqual(1, kwargs["properties"]["terminal_log_lines"]["minimum"])
+        self.assertFalse(kwargs["additionalProperties"])
+
+        from jsonschema import Draft7Validator
+
+        validator = Draft7Validator(schema)
+        valid_progress = {
+            "plugins": {
+                "after_init": [
+                    {
+                        "plugin": "download_progress",
+                        "kwargs": {"log_file": "progress.log", "terminal_log_lines": 6},
+                    }
+                ]
+            }
+        }
+        invalid_progress = {
+            "plugins": {
+                "after_init": [{"plugin": "download_progress", "kwargs": {"unknown_option": True}}]
+            }
+        }
+        other_plugin = {
+            "plugins": {"after_init": [{"plugin": "usage_log", "kwargs": {"interval": 1}}]}
+        }
+
+        self.assertFalse(list(validator.iter_errors(valid_progress)))
+        self.assertTrue(list(validator.iter_errors(invalid_progress)))
+        self.assertFalse(list(validator.iter_errors(other_plugin)))
+
+    def test_download_result_paths_are_resolved(self):
+        result = SimpleNamespace(
+            detail=SimpleNamespace(save_path=Path("downloads") / "album-1"),
+            duration=1.5,
+            manifest=SimpleNamespace(
+                image_filepath_list=[Path("downloads") / "album-1" / "1.jpg"],
+                export_filepath_dict={"pdf": [Path("downloads") / "album-1.pdf"]},
+            ),
+        )
+
+        serialized = _serialize_download_result(result)
+
+        self.assertEqual(str((Path("downloads") / "album-1").resolve()), serialized["download_path"])
+        self.assertEqual(
+            [str((Path("downloads") / "album-1" / "1.jpg").resolve())],
+            serialized["image_paths"],
+        )
+        self.assertEqual(
+            {"pdf": [str((Path("downloads") / "album-1.pdf").resolve())]},
+            serialized["export_files"],
+        )
+
 
 class TestAlbumComments(unittest.TestCase):
     def test_nested_comments_are_serialized_for_mcp(self):
@@ -144,7 +203,7 @@ class TestAlbumComments(unittest.TestCase):
                 "replys": [reply_data],
             }
         )
-        comment_page = JmAlbumCommentPage([root_comment], total=11)
+        comment_page = JmAlbumCommentPage([root_comment], total=11, page_number=3)
         client = Mock()
         client.album_pagination.return_value = comment_page
 
@@ -156,7 +215,7 @@ class TestAlbumComments(unittest.TestCase):
 
         client.album_pagination.assert_called_once_with("302820", page=2)
         self.assertEqual("302820", result["album_id"])
-        self.assertEqual(2, result["page"])
+        self.assertEqual(3, result["page"])
         self.assertEqual(10, result["page_size"])
         self.assertEqual(11, result["total"])
         self.assertEqual(2, result["page_count"])
@@ -171,6 +230,178 @@ class TestAlbumComments(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "page must be"):
             service.get_album_comments("302820", page=0)
 
+    def test_forum_comments_include_source_album_and_upstream_page(self):
+        comment = JmAlbumComment(
+            {
+                "CID": "forum-1",
+                "AID": "654321",
+                "UID": "7",
+                "content": "site-wide comment",
+                "username": "reader",
+                "nickname": "Reader",
+                "is_spoiler": False,
+                "likes": "4",
+            }
+        )
+        comment_page = JmAlbumCommentPage([comment], total=21, page_number=4)
+        client = Mock()
+        client.forum_pagination.return_value = comment_page
+        service = object.__new__(JmcomicService)
+        service.client = client
+        service.logger = logging.getLogger("jmcomic_ai.test.comments.forum")
+
+        result = service.get_forum_comments(page=2)
+
+        client.forum_pagination.assert_called_once_with(page=2)
+        self.assertEqual(4, result["page"])
+        self.assertEqual("654321", result["comments"][0]["album_id"])
+        self.assertEqual(4, result["comments"][0]["likes"])
+
+    def test_search_page_uses_upstream_page_number(self):
+        service = object.__new__(JmcomicService)
+        search_page = SimpleNamespace(content=[], total=0, page_number=6)
+
+        result = service._parse_search_page(search_page)
+
+        self.assertEqual(6, result["page"])
+
+
+class TestPostProcessCompatibility(unittest.TestCase):
+    def test_post_process_returns_registered_plugin_outputs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            album = Mock()
+            album.__iter__ = Mock(return_value=iter([]))
+            photo = Mock()
+            album.__iter__ = Mock(return_value=iter([photo]))
+            image_dir = Path(temp_dir) / "images"
+            image_dir.mkdir()
+            (image_dir / "1.jpg").write_bytes(b"image")
+            output_path = Path(temp_dir) / "exports" / "album.pdf"
+
+            class FakePlugin:
+                @classmethod
+                def build(cls, option):
+                    del option
+                    return cls()
+
+                @staticmethod
+                def invoke(album, downloader, **kwargs):
+                    del kwargs
+                    output_path.parent.mkdir()
+                    output_path.write_bytes(b"pdf")
+                    downloader.record_export_filepath(album, output_path)
+
+            service = object.__new__(JmcomicService)
+            service.logger = logging.getLogger("jmcomic_ai.test.post-process")
+            service.client = Mock()
+            service.client.get_album_detail.return_value = album
+            service.option = Mock()
+            service.option.decide_image_save_dir.return_value = image_dir
+
+            with patch.dict(JmModuleConfig.REGISTRY_PLUGIN, {"img2pdf": FakePlugin}):
+                result = service.post_process("123", "img2pdf")
+
+            self.assertEqual("success", result["status"])
+            self.assertEqual(str(output_path.resolve()), result["output_path"])
+            self.assertEqual([str(output_path.resolve())], result["output_paths"])
+            self.assertFalse(result["is_directory"])
+
+    def test_album_zip_uses_album_filename_rule_by_default(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            album = Mock()
+            photo = Mock()
+            album.__iter__ = Mock(return_value=iter([photo]))
+            image_dir = Path(temp_dir) / "images"
+            image_dir.mkdir()
+            (image_dir / "1.jpg").write_bytes(b"image")
+            captured_params = {}
+
+            class FakePlugin:
+                @classmethod
+                def build(cls, option):
+                    del option
+                    return cls()
+
+                @staticmethod
+                def invoke(album, downloader, **kwargs):
+                    captured_params.update(kwargs)
+                    output_path = Path(temp_dir) / "album.zip"
+                    output_path.write_bytes(b"zip")
+                    downloader.record_export_filepath(album, output_path)
+
+            service = object.__new__(JmcomicService)
+            service.logger = logging.getLogger("jmcomic_ai.test.post-process.zip")
+            service.client = Mock()
+            service.client.get_album_detail.return_value = album
+            service.option = Mock()
+            service.option.decide_image_save_dir.return_value = image_dir
+
+            with patch.dict(JmModuleConfig.REGISTRY_PLUGIN, {"zip": FakePlugin}):
+                result = service.post_process("123", "zip")
+
+            self.assertEqual("success", result["status"])
+            self.assertEqual("Aid", captured_params["filename_rule"])
+
+    def test_post_process_expands_user_output_paths_before_plugin_invocation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            album = Mock()
+            photo = Mock()
+            album.__iter__ = Mock(return_value=iter([photo]))
+            image_dir = Path(temp_dir) / "images"
+            image_dir.mkdir()
+            (image_dir / "1.jpg").write_bytes(b"image")
+            captured_params = {}
+
+            class FakePlugin:
+                @classmethod
+                def build(cls, option):
+                    del option
+                    return cls()
+
+                @staticmethod
+                def invoke(album, downloader, **kwargs):
+                    captured_params.update(kwargs)
+                    output_path = Path(kwargs["dir_rule"]["base_dir"]) / "album.pdf"
+                    output_path.parent.mkdir(parents=True)
+                    output_path.write_bytes(b"pdf")
+                    downloader.record_export_filepath(album, output_path)
+
+            service = object.__new__(JmcomicService)
+            service.logger = logging.getLogger("jmcomic_ai.test.post-process.user-path")
+            service.client = Mock()
+            service.client.get_album_detail.return_value = album
+            service.option = Mock()
+            service.option.decide_image_save_dir.return_value = image_dir
+            params = {
+                "dir_rule": {"rule": "Bd", "base_dir": "~/jmcomic-review-output"},
+                "pdf_dir": "~/jmcomic-review-pdf",
+                "img_dir": "~/jmcomic-review-images",
+                "zip_dir": "~/jmcomic-review-zips",
+            }
+
+            fake_home = Path(temp_dir) / "home"
+            with (
+                patch.dict(os.environ, {"HOME": str(fake_home)}),
+                patch.dict(JmModuleConfig.REGISTRY_PLUGIN, {"img2pdf": FakePlugin}),
+            ):
+                result = service.post_process("123", "img2pdf", params)
+
+                expected_base_dir = str(Path("~/jmcomic-review-output").expanduser())
+                expected_pdf_dir = str(Path("~/jmcomic-review-pdf").expanduser())
+                expected_img_dir = str(Path("~/jmcomic-review-images").expanduser())
+                expected_zip_dir = str(Path("~/jmcomic-review-zips").expanduser())
+
+            self.assertEqual("success", result["status"])
+            self.assertEqual(expected_base_dir, captured_params["dir_rule"]["base_dir"])
+            self.assertEqual(expected_pdf_dir, captured_params["pdf_dir"])
+            self.assertEqual(expected_img_dir, captured_params["img_dir"])
+            self.assertEqual(expected_zip_dir, captured_params["zip_dir"])
+            self.assertEqual(
+                str((Path(expected_base_dir) / "album.pdf").resolve()),
+                result["output_path"],
+            )
+            self.assertEqual("~/jmcomic-review-output", params["dir_rule"]["base_dir"])
+
 
 class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_album_downloads_write_isolated_task_logs(self):
@@ -179,23 +410,9 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
             service.logger = logging.getLogger("jmcomic_ai.test.downloads")
             service.logger.setLevel(logging.INFO)
             service.task_log_dir = Path(temp_dir)
-
-            albums = {
-                "101": SimpleNamespace(name="Album 101"),
-                "202": SimpleNamespace(name="Album 202"),
-            }
-            client = Mock()
-            client.get_album_detail.side_effect = lambda album_id: albums[album_id]
-            service.client = client
-
-            class FakeDirRule:
-                @staticmethod
-                def decide_album_root_dir(album):
-                    return Path(temp_dir) / album.name.replace(" ", "-")
+            service.client = Mock()
 
             class FakeOption:
-                dir_rule = FakeDirRule()
-
                 @staticmethod
                 def download_album(album_id, downloader):
                     del downloader
@@ -203,6 +420,15 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
                         jm_log("test.download", f"jm-log-{album_id}")
                         service.logger.info(f"service-log-{album_id}")
                         time.sleep(0.01)
+                    detail = SimpleNamespace(
+                        name=f"Album {album_id}",
+                        save_path=Path(temp_dir) / f"album-{album_id}",
+                    )
+                    manifest = SimpleNamespace(
+                        image_filepath_list=[Path(temp_dir) / f"{album_id}-1.jpg"],
+                        export_filepath_dict={"pdf": [Path(temp_dir) / f"{album_id}.pdf"]},
+                    )
+                    return SimpleNamespace(detail=detail, manifest=manifest, duration=0.25)
 
             service.option = FakeOption()
 
@@ -216,6 +442,11 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
                 (result_202, "202", "101"),
             ):
                 self.assertEqual("success", result["status"])
+                self.assertEqual(f"Album {own_id}", result["title"])
+                self.assertEqual(str((Path(temp_dir) / f"album-{own_id}").resolve()), result["download_path"])
+                self.assertEqual(0.25, result["duration"])
+                self.assertEqual([str((Path(temp_dir) / f"{own_id}-1.jpg").resolve())], result["image_paths"])
+                self.assertEqual({"pdf": [str((Path(temp_dir) / f"{own_id}.pdf").resolve())]}, result["export_files"])
                 self.assertTrue(result["task_id"].startswith(f"download-album-{own_id}-"))
                 log_path = Path(result["log_path"])
                 self.assertTrue(log_path.is_file())
@@ -226,6 +457,7 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(f"album={own_id}", log_text)
                 self.assertNotIn(f"jm-log-{other_id}", log_text)
                 self.assertNotIn(f"service-log-{other_id}", log_text)
+            service.client.get_album_detail.assert_not_called()
 
     async def test_failed_photo_download_still_returns_a_task_log(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -246,6 +478,10 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual("failed", result["status"])
             self.assertEqual("expected download failure", result["error"])
+            self.assertEqual("", result["download_path"])
+            self.assertIsNone(result["duration"])
+            self.assertEqual([], result["image_paths"])
+            self.assertEqual({}, result["export_files"])
             log_path = Path(result["log_path"])
             self.assertTrue(log_path.is_file())
             self.assertIn("expected download failure", log_path.read_text(encoding="utf-8"))
@@ -257,8 +493,13 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
             service.logger.setLevel(logging.INFO)
             service.task_log_dir = Path(temp_dir)
             service.client = Mock()
-            photo = [SimpleNamespace(id="1"), SimpleNamespace(id="2")]
+            photo = SimpleNamespace(
+                save_path=Path(temp_dir) / "photo-404",
+                __len__=lambda: 99,
+            )
             download_dir = Path(temp_dir) / "photo-404"
+            image_paths = [download_dir / "1.jpg", download_dir / "2.jpg"]
+            export_path = Path(temp_dir) / "photo-404.zip"
 
             class FakeOption:
                 @staticmethod
@@ -266,19 +507,21 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
                     del downloader
                     with jm_task_context(download_type="photo", jm_id=photo_id):
                         jm_log("test.download", f"jm-log-{photo_id}")
-                    return SimpleNamespace(detail=photo)
-
-                @staticmethod
-                def decide_image_save_dir(detail):
-                    self.assertIs(photo, detail)
-                    return download_dir
+                    manifest = SimpleNamespace(
+                        image_filepath_list=image_paths,
+                        export_filepath_dict={"zip": [export_path]},
+                    )
+                    return SimpleNamespace(detail=photo, manifest=manifest, duration=1.5)
 
             service.option = FakeOption()
             result = await service.download_photo("404")
 
             self.assertEqual("success", result["status"])
             self.assertEqual(2, result["image_count"])
-            self.assertEqual(str(download_dir), result["download_path"])
+            self.assertEqual(str(download_dir.resolve()), result["download_path"])
+            self.assertEqual(1.5, result["duration"])
+            self.assertEqual([str(path.resolve()) for path in image_paths], result["image_paths"])
+            self.assertEqual({"zip": [str(export_path.resolve())]}, result["export_files"])
             service.client.get_photo_detail.assert_not_called()
             log_text = Path(result["log_path"]).read_text(encoding="utf-8")
             self.assertIn("mcp_tool=download-photo", log_text)

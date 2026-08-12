@@ -1,6 +1,6 @@
 ---
 name: jmcomic
-description: Search, browse, inspect comments, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
+description: Search, browse, inspect album-specific or site-wide comments, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
 ---
 
 # JMComic Skill
@@ -12,7 +12,7 @@ This skill enables you to interact with JMComic (18comic), a popular manga platf
 Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
-- Read album comments and nested replies, including spoiler flags
+- Read album-specific or site-wide comments and nested replies, including spoiler flags
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
@@ -34,6 +34,9 @@ Both `download_album` and `download_photo` return structured dictionaries:
     "album_id": str,
     "title": str,
     "download_path": str,  # Absolute path to download directory
+    "duration": float | None,  # Total elapsed time in seconds
+    "image_paths": list[str],  # Actual downloaded or cached image paths
+    "export_files": dict[str, list[str]],  # Plugin outputs grouped by suffix
     "task_id": str,        # Dedicated ID for this download invocation
     "log_path": str,       # Absolute path to this task's log file
     "error": str | None
@@ -45,8 +48,11 @@ Both `download_album` and `download_photo` return structured dictionaries:
 {
     "status": "success" | "failed",
     "photo_id": str,
-    "image_count": int,
+    "image_count": int,    # Number of actual image paths in this result
     "download_path": str,  # Absolute path to download directory
+    "duration": float | None,  # Total elapsed time in seconds
+    "image_paths": list[str],  # Actual downloaded or cached image paths
+    "export_files": dict[str, list[str]],  # Plugin outputs grouped by suffix
     "task_id": str,        # Dedicated ID for this download invocation
     "log_path": str,       # Absolute path to this task's log file
     "error": str | None
@@ -57,7 +63,11 @@ Both `download_album` and `download_photo` return structured dictionaries:
 
 **Persistent Task Logs**: Every download invocation creates an isolated log file and returns its `task_id` and `log_path`, including failed downloads. Logs default to `~/.jmcomic-ai/logs`; set `JM_TASK_LOG_DIR` to use another directory.
 
+**Artifact Handoff**: Use `image_paths` and `export_files` for packaging, sending, or cleanup instead of rescanning the configured directory. `download_path` comes from the completed upstream download result rather than a pre-download path prediction.
+
 **File-only Logging**: Regular `jmcomic`, `jmcomic_ai`, and MCP runtime logs share `~/.jmcomic-ai/jmcomic_ai.log` and are not emitted to stdout or stderr. Set `JM_LOG_PATH` to override the global log file. MCP protocol messages and explicit CLI result output are unaffected.
+
+**Upstream Rich Terminal Progress**: `jmcomic 2.7.4` adds the optional `download_progress` plugin with `log_file` and `terminal_log_lines`. Recommend it only when the user explicitly wants Rich progress in an interactive terminal. Do not enable it for `jmai` MCP/stdio downloads, which already use MCP Context notifications and isolated task logs.
 
 ### Album Comments
 
@@ -89,6 +99,8 @@ Use `get_album_comments(album_id: str, page: int = 1)` to read one page of comme
 }
 ```
 
+Use `get_forum_comments(page: int = 1)` for the latest site-wide comments. It returns the same comment objects and pagination fields without an `album_id` filter; each comment's own `album_id` identifies its source album. This is also read-only.
+
 ## Core Capabilities
 
 ### 🛠️ Post-Processing
@@ -106,12 +118,13 @@ This skill supports advanced post-processing of downloaded manga. It returns str
     "process_type": str,  # Process type used
     "album_id": str,  # Album ID processed
     "output_path": str,  # Absolute path to generated file/directory (empty string on error)
+    "output_paths": list[str],  # All files actually registered by the upstream plugin
     "is_directory": bool,  # True if output is a directory (e.g., photo-level zip), False on error
     "message": str  # Success/error message
 }
 ```
 
-**All fields are always present**. On error, `output_path` will be an empty string and `is_directory` will be `False`.
+**All fields are always present**. On error, `output_path` is empty, `output_paths` is empty, and `is_directory` is `False`.
 
 **Output Control**: Use `dir_rule` (a `{"rule": "DSL_STRING", "base_dir": "BASE_PATH"}` dict) for custom output paths. If omitted, files are saved in the configured default directory. The DSL supports `Bd` (base_dir), `Axxx`/`Pxxx` album/photo attributes, and `{attr}` Python format placeholders. When looping over albums into one `base_dir`, include `{Aid}` or `{Atitle}` to avoid overwrites.
 
@@ -206,6 +219,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `search_export.py` | Search by keyword/ranking/category and export to CSV or JSON (multi-page). |
 | `album_info.py` | Query detailed metadata for one or many albums; print or export to JSON. |
 | `album_comments.py` | Fetch one page of album comments and recursive replies; print or export to JSON. |
+| `forum_comments.py` | Fetch one page of site-wide comments with source album IDs; print or export to JSON. |
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
 | `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
@@ -221,6 +235,7 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `post_process.py` | `post_process` | High | `--id`→`album_id`, `--type`→`process_type`, optional flags to `params`. `--dir-rule` + `--base-dir` map to `params.dir_rule`. |
 | `album_info.py` | `get_album_detail` | Partial | Batch wrapper over repeated single-album calls; output format is script-defined. |
 | `album_comments.py` | `get_album_comments` | High | `--id` maps to `album_id`, `--page` maps to `page`, and the JSON response preserves the MCP result shape. |
+| `forum_comments.py` | `get_forum_comments` | High | `--page` maps to `page`, and each returned comment preserves its source `album_id`. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
 | `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |

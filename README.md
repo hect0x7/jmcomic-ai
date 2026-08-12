@@ -145,7 +145,7 @@ skills/jmcomic/
 │   ├── ecosystem.md                # APK 获取、本地阅读与下载后承接流程
 │   ├── scripts.md                  # 脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
-└── 📂 scripts/                     # 11 个即用 CLI 脚本
+└── 📂 scripts/                     # 12 个即用 CLI 脚本
     ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
@@ -153,6 +153,7 @@ skills/jmcomic/
     ├── search_export.py            # 🔍 搜索并导出 CSV/JSON
     ├── album_info.py               # 📋 本子详情查询
     ├── album_comments.py           # 💬 评论与回复查询
+    ├── forum_comments.py           # 🌐 全站最新评论查询
     ├── download_covers.py          # 🖼️ 批量下载封面
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
@@ -182,20 +183,21 @@ skills/jmcomic/
 | `browse_albums` | 分类浏览 + 排行榜（统一接口） | `category`, `order_by`, `time_range` |
 | `get_album_detail` | 获取本子详情（作者/标签/浏览量等） | `album_id` |
 | `get_album_comments` | 获取评论、剧透标记与多层回复 | `album_id`, `page` |
+| `get_forum_comments` | 获取全站最新评论及来源本子 | `page` |
 
 ### 下载
 
 | 工具 | 功能 | 关键特性 |
 |:---|:---|:---|
-| `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
-| `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 · 返回任务 ID 与专属日志路径 |
+| `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回实际图片、导出文件、耗时及任务日志 |
+| `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 · 返回实际图片、导出文件、耗时及任务日志 |
 | `download_cover` | 下载封面图片 | 默认保存至 `covers/`，可用 `output_dir` 指定目录 |
 
 ### 后处理
 
 | 工具 | 功能 | 支持格式 |
 |:---|:---|:---|
-| `post_process` | 对已下载内容进行格式转换 | 📦 ZIP · 📄 PDF · 🖼️ 长图拼接 |
+| `post_process` | 对已下载内容进行格式转换并返回真实产物路径 | 📦 ZIP · 📄 PDF · 🖼️ 长图拼接 |
 
 ### 配置与账户
 
