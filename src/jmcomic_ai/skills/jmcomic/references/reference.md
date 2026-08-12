@@ -176,6 +176,18 @@ Monitor hardware usage.
     enable_warning: true
 ```
 
+#### `download_progress` (after_init, interactive terminal only)
+Show the upstream Rich album/chapter progress UI and write complete logs to a file.
+```yaml
+- plugin: download_progress
+  kwargs:
+    log_file: jmcomic-download.log
+    terminal_log_lines: 6
+```
+
+Use this only for direct interactive-terminal workflows. Do not enable it for `jmai` MCP/stdio
+downloads, which already report progress through MCP Context and return an isolated task log.
+
 #### `login` (after_init)
 Login with username and password.
 ```yaml

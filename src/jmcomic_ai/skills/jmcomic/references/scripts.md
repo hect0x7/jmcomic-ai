@@ -191,6 +191,22 @@ python scripts/album_comments.py --id 302820 --output comments.json
 - ✅ Includes `total`, `page_count`, `page_size`, and current-page `comment_count`
 - ✅ Read-only; does not post comments or replies
 
+## 🌐 `forum_comments.py` - Site-Wide Comments Query
+
+Fetch one page of the latest site-wide comments as structured JSON:
+
+```bash
+# First page (print JSON to console)
+python scripts/forum_comments.py
+
+# Select another page and export it
+python scripts/forum_comments.py --page 2 --output forum-comments.json
+```
+
+Each comment includes its source `album_id`. The HTML client does not expose global `total` or
+`page_count`, so those fields may be `null`; the API client provides them when available. This tool
+is read-only and does not post comments or replies.
+
 ## 🖼️ `download_covers.py` - Batch Cover Downloads
 
 Download cover images for multiple albums:

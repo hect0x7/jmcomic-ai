@@ -63,6 +63,24 @@ TIME_RANGE_MAP: dict[str, str] = {
 }
 
 
+def _serialize_download_result(result: Any) -> dict[str, Any]:
+    """Convert jmcomic 2.7.4 download metadata into MCP-safe values."""
+    manifest = result.manifest
+
+    def serialize_path(path: str | Path) -> str:
+        return str(Path(path).expanduser().resolve())
+
+    return {
+        "download_path": serialize_path(result.detail.save_path),
+        "duration": result.duration,
+        "image_paths": [serialize_path(path) for path in manifest.image_filepath_list],
+        "export_files": {
+            str(suffix): [serialize_path(path) for path in paths]
+            for suffix, paths in manifest.export_filepath_dict.items()
+        },
+    }
+
+
 def _get_record_task_context(record: logging.LogRecord) -> Mapping[str, Any]:
     """Read JM task context from a record, falling back to the current context."""
     context = getattr(record, "jm_task_context", None)
@@ -509,6 +527,7 @@ class JmcomicService:
         return {
             "albums": albums,
             "total_count": int(page.total) if hasattr(page, "total") else len(albums),
+            "page": page.page_number,
         }
 
     def _parse_album_detail(self, album: JmAlbumDetail) -> dict[str, Any]:
@@ -553,7 +572,7 @@ class JmcomicService:
         """Convert an album comment page to the stable MCP response shape."""
         return {
             "album_id": str(album_id),
-            "page": page_number,
+            "page": comment_page.page_number if comment_page.page_number is not None else page_number,
             "page_size": comment_page.page_size,
             "total": comment_page.total,
             "page_count": comment_page.page_count,
@@ -612,13 +631,13 @@ class JmcomicService:
             valid_orders = ", ".join(ORDER_BY_MAP.keys())
             error_msg = f"Invalid order_by: {order_by}. Valid options: {valid_orders}"
             self.logger.error(error_msg)
-            return {"albums": [], "total_count": 0, "error": error_msg}
+            return {"albums": [], "total_count": 0, "page": page, "error": error_msg}
 
         if time_value is None:
             valid_times = ", ".join(TIME_RANGE_MAP.keys())
             error_msg = f"Invalid time_range: {time_range}. Valid options: {valid_times}"
             self.logger.error(error_msg)
-            return {"albums": [], "total_count": 0, "error": error_msg}
+            return {"albums": [], "total_count": 0, "page": page, "error": error_msg}
 
         # Call core search method
         search_page: JmSearchPage = client.search(
@@ -726,19 +745,19 @@ class JmcomicService:
             valid_categories = ", ".join(category_map.keys())
             error_msg = f"Invalid category: {category}. Valid options: {valid_categories}"
             self.logger.error(error_msg)
-            return {"albums": [], "total_count": 0, "error": error_msg}
+            return {"albums": [], "total_count": 0, "page": page, "error": error_msg}
 
         if time_value is None:
             valid_times = ", ".join(TIME_RANGE_MAP.keys())
             error_msg = f"Invalid time_range: {time_range}. Valid options: {valid_times}"
             self.logger.error(error_msg)
-            return {"albums": [], "total_count": 0, "error": error_msg}
+            return {"albums": [], "total_count": 0, "page": page, "error": error_msg}
 
         if order_value is None:
             valid_orders = ", ".join(ORDER_BY_MAP.keys())
             error_msg = f"Invalid order_by: {order_by}. Valid options: {valid_orders}"
             self.logger.error(error_msg)
-            return {"albums": [], "total_count": 0, "error": error_msg}
+            return {"albums": [], "total_count": 0, "page": page, "error": error_msg}
 
         # Call unified categories_filter API
         search_page: JmCategoryPage = client.categories_filter(
@@ -773,6 +792,9 @@ class JmcomicService:
                 - album_id: 本子 ID
                 - title: 本子标题
                 - download_path: 下载目录的绝对路径
+                - duration: 下载调用总耗时（秒）
+                - image_paths: 实际下载或命中缓存的图片绝对路径
+                - export_files: 下载插件生成的文件路径，按扩展名分组
                 - task_id: 本次 MCP 下载调用的任务 ID
                 - log_path: 本次调用专属日志文件的绝对路径
                 - error: 如果失败则包含错误信息
@@ -781,21 +803,26 @@ class JmcomicService:
 
         with self._download_task_log("download-album", album_id) as (task_id, log_path):
             album = None
-            target_path: Path | str = ""
+            download_metadata: dict[str, Any] = {
+                "download_path": "",
+                "duration": None,
+                "image_paths": [],
+                "export_files": {},
+            }
             try:
-                album = self.get_client().get_album_detail(album_id)
-                target_path = self.option.dir_rule.decide_album_root_dir(album)
-
                 loop = asyncio.get_running_loop()
                 McpProgressDownloader, _ = _build_progress_downloaders(ctx, loop, self.logger, threading)
 
                 def _blocking_download():
                     self.logger.info(f"Starting blocking download for album {album_id}")
-                    self.option.download_album(album_id, downloader=McpProgressDownloader)
+                    result = self.option.download_album(album_id, downloader=McpProgressDownloader)
                     self.logger.info(f"Download completed for album {album_id}")
-                    return "success"
+                    return result
 
-                status = await asyncio.to_thread(_blocking_download)
+                result = await asyncio.to_thread(_blocking_download)
+                album = result.detail
+                download_metadata = _serialize_download_result(result)
+                status = "success"
                 error_msg = None
             except Exception as e:
                 status = "failed"
@@ -806,7 +833,7 @@ class JmcomicService:
                 "status": status,
                 "album_id": album_id,
                 "title": str(album.name) if album is not None else "",
-                "download_path": str(target_path),
+                **download_metadata,
                 "task_id": task_id,
                 "log_path": str(log_path),
                 "error": error_msg,
@@ -826,6 +853,9 @@ class JmcomicService:
                 - photo_id: 章节 ID
                 - image_count: 下载的图片数量
                 - download_path: 下载目录的绝对路径
+                - duration: 下载调用总耗时（秒）
+                - image_paths: 实际下载或命中缓存的图片绝对路径
+                - export_files: 下载插件生成的文件路径，按扩展名分组
                 - task_id: 本次 MCP 下载调用的任务 ID
                 - log_path: 本次调用专属日志文件的绝对路径
                 - error: 如果失败则包含错误信息
@@ -833,8 +863,12 @@ class JmcomicService:
         import threading
 
         with self._download_task_log("download-photo", photo_id) as (task_id, log_path):
-            download_path: Path | str = ""
-            image_count = 0
+            download_metadata: dict[str, Any] = {
+                "download_path": "",
+                "duration": None,
+                "image_paths": [],
+                "export_files": {},
+            }
             try:
                 loop = asyncio.get_running_loop()
                 _, McpPhotoProgressDownloader = _build_progress_downloaders(ctx, loop, self.logger, threading)
@@ -843,12 +877,11 @@ class JmcomicService:
                     self.logger.info(f"Starting download for photo {photo_id}")
                     result = self.option.download_photo(photo_id, downloader=McpPhotoProgressDownloader)
                     self.logger.info(f"Download completed for photo {photo_id}")
-                    return result.detail
+                    return result
 
-                photo = await asyncio.to_thread(_blocking_download)
+                result = await asyncio.to_thread(_blocking_download)
+                download_metadata = _serialize_download_result(result)
                 status = "success"
-                download_path = self.option.decide_image_save_dir(photo)
-                image_count = len(photo)
                 error_msg = None
             except Exception as e:
                 status = "failed"
@@ -858,8 +891,8 @@ class JmcomicService:
             return {
                 "status": status,
                 "photo_id": photo_id,
-                "image_count": image_count,
-                "download_path": str(download_path),
+                "image_count": len(download_metadata["image_paths"]),
+                **download_metadata,
                 "task_id": task_id,
                 "log_path": str(log_path),
                 "error": error_msg,
@@ -930,6 +963,33 @@ class JmcomicService:
         )
         return result
 
+    def get_forum_comments(self, page: int = 1) -> dict[str, Any]:
+        """
+        获取全站最新发布的一页评论，包括评论所属本子、递归回评和剧透标识。
+
+        参数:
+            page: 评论页码，从 1 开始（默认值：1）。
+
+        返回:
+            包含当前页码、分页总数、评论数量和评论列表的字典。
+            HTML 客户端不提供 total 和 page_count，此时对应字段为 null。
+        """
+        if page < 1:
+            raise ValueError("page must be greater than or equal to 1")
+
+        self.logger.info(f"Fetching forum comments: page={page}")
+        comment_page = self.get_client().forum_pagination(page=page)
+        result = {
+            "page": comment_page.page_number if comment_page.page_number is not None else page,
+            "page_size": comment_page.page_size,
+            "total": comment_page.total,
+            "page_count": comment_page.page_count,
+            "comment_count": comment_page.comment_count,
+            "comments": [self._parse_album_comment(comment) for comment in comment_page],
+        }
+        self.logger.info(f"Forum comments fetched: page={result['page']}, comments={result['comment_count']}")
+        return result
+
     def download_cover(self, album_id: str, output_dir: str | None = None) -> str:
         """
         下载特定本子的封面图片。
@@ -973,6 +1033,7 @@ class JmcomicService:
                 - process_type: 后处理类型
                 - album_id: 本子 ID
                 - output_path: 输出文件/目录的绝对路径
+                - output_paths: 插件实际生成的全部文件绝对路径
                 - is_directory: 输出是否为目录
                 - message: 成功或错误消息
         """
@@ -988,6 +1049,13 @@ class JmcomicService:
             class MockDownloader:
                 def __init__(self):
                     self.download_success_dict = {}
+                    self.export_filepaths = []
+
+                def record_export_filepath(self, detail, filepath):
+                    del detail
+                    resolved_path = str(Path(filepath).resolve())
+                    if resolved_path not in self.export_filepaths:
+                        self.export_filepaths.append(resolved_path)
 
             mock_downloader = MockDownloader()
             photo_dict = {}
@@ -1018,6 +1086,7 @@ class JmcomicService:
                     "album_id": album_id,
                     "process_type": process_type,
                     "output_path": "",
+                    "output_paths": [],
                     "is_directory": False,
                     "message": f"Error: No downloaded images found for album {album_id}."
                 }
@@ -1033,14 +1102,27 @@ class JmcomicService:
                     "album_id": album_id,
                     "process_type": process_type,
                     "output_path": "",
+                    "output_paths": [],
                     "is_directory": False,
                     "message": f"Plugin '{process_type}' not found."
                 }
 
             actual_params = params.copy() if params else {}
 
+            dir_rule = actual_params.get('dir_rule')
+            if isinstance(dir_rule, dict) and 'base_dir' in dir_rule:
+                actual_params['dir_rule'] = {
+                    **dir_rule,
+                    'base_dir': str(Path(dir_rule['base_dir']).expanduser()),
+                }
+
+            for path_param in ('zip_dir', 'pdf_dir', 'img_dir'):
+                if path_param in actual_params and actual_params[path_param] is not None:
+                    actual_params[path_param] = str(Path(actual_params[path_param]).expanduser())
+
             if 'filename_rule' not in actual_params:
-                actual_params['filename_rule'] = 'Aid' if process_type != 'zip' else 'Ptitle'
+                photo_level_zip = process_type == 'zip' and actual_params.get('level') == 'photo'
+                actual_params['filename_rule'] = 'Ptitle' if photo_level_zip else 'Aid'
 
             actual_params.update({'album': album, 'downloader': mock_downloader})
 
@@ -1048,27 +1130,13 @@ class JmcomicService:
             plugin = pclass.build(self.option)
             plugin.invoke(**actual_params)
 
-            # 4. Predict Output Path
-            suffix_map = {'zip': actual_params.get('suffix', 'zip'), 'img2pdf': 'pdf', 'long_img': 'png'}
-            suffix = suffix_map.get(process_type, 'unknown')
+            # 4. Return the files actually registered by jmcomic 2.7.4 plugins.
+            output_paths = mock_downloader.export_filepaths
+            if not output_paths:
+                raise RuntimeError(f"Plugin '{process_type}' did not register any output files")
 
-            # Extract common params for decide_filepath
-            dir_rule_dict = actual_params.get('dir_rule')
-            filename_rule = actual_params.get('filename_rule')
-
-            output_path = "unknown"
-            is_directory = False
-
-            # Special case for Zip photo level (multiple files)
-            if process_type == 'zip' and actual_params.get('level', 'photo') == 'photo':
-                first_photo = next(iter(photo_dict.keys()))
-                # Plugin ignore base_dir if dir_rule_dict is present
-                sample_path = plugin.decide_filepath(album, first_photo, filename_rule, suffix, None, dir_rule_dict)
-                output_path = str(Path(sample_path).parent.resolve())
-                is_directory = True
-            else:
-                raw_path = plugin.decide_filepath(album, None, filename_rule, suffix, None, dir_rule_dict)
-                output_path = str(Path(raw_path).resolve())
+            is_directory = len(output_paths) > 1
+            output_path = str(Path(output_paths[0]).parent) if is_directory else output_paths[0]
 
             self.logger.info(f"Post-process '{process_type}' finished. Output: {output_path}")
             return {
@@ -1076,6 +1144,7 @@ class JmcomicService:
                 "process_type": process_type,
                 "album_id": album_id,
                 "output_path": output_path,
+                "output_paths": output_paths,
                 "is_directory": is_directory,
                 "message": f"Post-process '{process_type}' completed successfully."
             }
@@ -1087,6 +1156,7 @@ class JmcomicService:
                 "album_id": album_id,
                 "process_type": process_type,
                 "output_path": "",
+                "output_paths": [],
                 "is_directory": False,
                 "message": f"Post-process failed: {e}"
             }

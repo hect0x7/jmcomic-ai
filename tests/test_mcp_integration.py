@@ -14,6 +14,7 @@ import socket
 import time
 import unittest
 from multiprocessing import Process
+from pathlib import Path
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -98,6 +99,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "search_album",
                 "get_album_detail",
                 "get_album_comments",
+                "get_forum_comments",
                 "browse_albums",
                 "download_album",
                 "download_photo",
@@ -156,6 +158,14 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
             print(f"  Result: {str(result)[:200]}...")
             self.assertIsNotNone(result)
             print("\n[OK] get_album_comments executed successfully")
+
+    async def test_tool_get_forum_comments(self):
+        """Test site-wide comment pagination."""
+        async with self._mcp_session() as session:
+            result = await session.call_tool("get_forum_comments", {"page": 1})
+            self.assertIsInstance(result.structuredContent, dict)
+            self.assertEqual(1, result.structuredContent["page"])
+            self.assertIn("comments", result.structuredContent)
 
     async def test_tool_browse_albums(self):
         """Test browse_albums tool (replaces get_ranking and get_category_list)"""
@@ -296,6 +306,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 ("search_album", {"keyword": TEST_SEARCH_KEYWORD, "page": 1}),
                 ("get_album_detail", {"album_id": TEST_ALBUM_ID}),
                 ("get_album_comments", {"album_id": TEST_ALBUM_ID, "page": 1}),
+                ("get_forum_comments", {"page": 1}),
                 ("browse_albums", {"time_range": "day", "order_by": "likes", "page": 1}),
                 ("browse_albums", {"category": "doujin", "page": 1}),
                 ("download_cover", {"album_id": TEST_ALBUM_ID}),
@@ -313,6 +324,14 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
 
                 try:
                     result = await session.call_tool(tool_name, args)
+                    if tool_name in {"download_photo", "download_album", "post_process"}:
+                        self.assertIsInstance(result.structuredContent, dict)
+                        self.assertEqual("success", result.structuredContent.get("status"), result.structuredContent)
+                    if tool_name == "post_process":
+                        output_paths = result.structuredContent.get("output_paths", [])
+                        self.assertTrue(output_paths, result.structuredContent)
+                        for output_path in output_paths:
+                            self.assertTrue(Path(output_path).exists(), output_path)
                     tool_results[tool_name] = "[OK] SUCCESS"
                     print(f"  -> Result: {str(result)[:100]}...")
                 except Exception as e:

@@ -251,7 +251,26 @@
                     "type": "array",
                     "description": "Plugins executed after initialization",
                     "items": {
-                        "$ref": "#/definitions/plugin"
+                        "allOf": [
+                            {
+                                "$ref": "#/definitions/plugin"
+                            },
+                            {
+                                "if": {
+                                    "properties": {
+                                        "plugin": {
+                                            "const": "download_progress"
+                                        }
+                                    },
+                                    "required": [
+                                        "plugin"
+                                    ]
+                                },
+                                "then": {
+                                    "$ref": "#/definitions/download_progress_plugin"
+                                }
+                            }
+                        ]
                     }
                 },
                 "before_album": {
@@ -319,7 +338,8 @@
                         "favorite_folder_export",
                         "skip_photo_with_few_images",
                         "img2pdf",
-                        "long_img"
+                        "long_img",
+                        "download_progress"
                     ]
                 },
                 "log": {
@@ -354,6 +374,37 @@
                                     "description": "Enable warnings for high resource usage"
                                 }
                             }
+                        }
+                    }
+                }
+            ]
+        },
+        "download_progress_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "download_progress"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "properties": {
+                                "log_file": {
+                                    "type": "string",
+                                    "default": "jmcomic-download.log",
+                                    "description": "File used by the upstream Rich progress plugin for complete download logs"
+                                },
+                                "terminal_log_lines": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "default": 6,
+                                    "description": "Recent log lines displayed above the upstream Rich terminal progress bars"
+                                }
+                            },
+                            "additionalProperties": false
                         }
                     }
                 }
