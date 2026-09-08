@@ -2,14 +2,25 @@
 
 import argparse
 import asyncio
+import io
+import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from jmcomic_ai.core import JmcomicService
-from jmcomic_ai.skills.jmcomic.scripts import batch_download, doctor, download_covers, download_photo
+from jmcomic_ai.skills.jmcomic.scripts import (
+    add_favorite_album,
+    batch_download,
+    doctor,
+    download_covers,
+    download_photo,
+    favorite_albums,
+    favorite_folders,
+)
 from jmcomic_ai.skills.jmcomic.scripts._script_utils import import_error_message
 
 
@@ -27,6 +38,66 @@ class TestImportErrors(unittest.TestCase):
         message = import_error_message(error, "jmcomic_ai", "Install it.")
 
         self.assertIn("dependency 'yaml' is unavailable", message)
+
+
+class TestFavoriteScripts(unittest.TestCase):
+    def test_json_results_and_exit_status(self):
+        cases = (
+            (favorite_folders, "get_favorite_folders", [], {"folders": [{"id": "4", "name": "Example folder"}]}, 0),
+            (
+                favorite_albums,
+                "browse_favorite_albums",
+                [],
+                {"albums": [{"id": "123", "title": "Example album"}], "total_count": 1, "page": 1, "folder_id": "0"},
+                0,
+            ),
+            (
+                add_favorite_album,
+                "add_favorite_album",
+                ["--id", "123"],
+                {"status": "success", "album_id": "123", "folder_id": "0", "message": "漫畫添加到您最喜愛的清單！"},
+                0,
+            ),
+            (
+                add_favorite_album,
+                "add_favorite_album",
+                ["--id", "123"],
+                {"status": "success", "album_id": "123", "folder_id": "0", "message": "已收藏，无需重复添加"},
+                0,
+            ),
+            (
+                add_favorite_album,
+                "add_favorite_album",
+                ["--id", "123"],
+                {"status": "error", "album_id": "123", "folder_id": "0", "message": "'status'"},
+                1,
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for module, method, argv, result, expected_exit in cases:
+                for export in (False,) if module is add_favorite_album else (False, True):
+                    with self.subTest(script=method, export=export, expected_exit=expected_exit):
+                        output_path = Path(temp_dir) / method / "nested" / "result.json"
+                        args = ["script", *argv]
+                        if export:
+                            args += ["--output", str(output_path)]
+                        service = Mock()
+                        getattr(service, method).return_value = result
+                        stdout = io.StringIO()
+                        exit_code = 0
+                        with (
+                            patch("sys.argv", args),
+                            patch.object(module, "JmcomicService", return_value=service),
+                            redirect_stdout(stdout),
+                        ):
+                            try:
+                                module.main()
+                            except SystemExit as exc:
+                                exit_code = exc.code
+
+                        output_text = output_path.read_text(encoding="utf-8") if export else stdout.getvalue()
+                        self.assertEqual(result, json.loads(output_text))
+                        self.assertEqual(expected_exit, exit_code)
 
 
 class TestIdParsing(unittest.TestCase):

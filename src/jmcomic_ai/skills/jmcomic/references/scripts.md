@@ -207,6 +207,65 @@ Each comment includes its source `album_id`. The HTML client does not expose glo
 `page_count`, so those fields may be `null`; the API client provides them when available. This tool
 is read-only and does not post comments or replies.
 
+## Favorites
+
+These scripts require valid authentication in `option.yml` (configured cookies or a login plugin).
+They do not inherit login state from a separate MCP session. All three support `--option` and print
+JSON results. The folder and album browsing scripts also accept `--output` to export their query
+results, creating missing parent directories. Service or export failures exit non-zero, as do
+structured error results.
+
+### `favorite_folders.py` - Favorite Folder Directory
+
+```bash
+python scripts/favorite_folders.py
+python scripts/favorite_folders.py --username YOUR_USERNAME --output folders.json
+```
+
+Returns `{"folders": [{"id": "123", "name": "My folder"}]}`. For HTML clients authenticated only
+by Cookie, `--username` is required; API clients ignore it and query the logged-in account.
+The folder directory may be empty, and the special all-favorites ID `"0"` may be absent.
+
+### `favorite_albums.py` - Browse Favorites
+
+```bash
+# Browse all favorites
+python scripts/favorite_albums.py
+
+# Browse one folder with a Cookie-authenticated HTML client
+python scripts/favorite_albums.py --folder-id 123 --page 2 --order-by latest --username YOUR_USERNAME --output favorites.json
+```
+
+| Parameter | Tool argument | Default |
+| :--- | :--- | :--- |
+| `--folder-id` | `folder_id` | `"0"` (all favorites) |
+| `--page` | `page` | `1` |
+| `--order-by` | `order_by` | `latest` |
+| `--username` | `username` | Empty; required for HTML Cookie-only queries |
+
+Returns `albums`, `total_count`, `page`, and `folder_id`, preserving the MCP response. Sorting accepts
+`latest`, `likes`, `views`, `pictures`, `score`, and `comments`, using the existing browsing mapping;
+actual sorting depends on upstream support. Invalid page, folder, or sort parameters produce an
+`error` field and exit code 1. An empty collection is a successful result.
+
+### `add_favorite_album.py` - Add a Favorite
+
+```bash
+python scripts/add_favorite_album.py --id 123456
+python scripts/add_favorite_album.py --id JM123456 --folder-id 123 --option /path/to/html-option.yml
+```
+
+`--id` maps to `album_id` and accepts a numeric ID, JM-prefixed ID, or album URL. `--folder-id` maps
+to `folder_id` and defaults to `"0"` (upstream default behavior). Non-default folder IDs require an
+HTML client; API clients reject them before sending a request.
+
+Prints `status`, `album_id`, `folder_id`, and `message` as JSON to stdout. For API clients, the service
+checks `is_favorite` in a fresh album detail response before adding. An existing album returns
+`status="success"` with `message="已收藏，无需重复添加"` and skips the add request. Lookup failures return an error.
+HTML clients retain upstream behavior, including errors for duplicate additions. `status="error"`
+exits with code 1. The returned folder ID echoes the request; it does not verify API default placement.
+Use `favorite_albums.py` to inspect the saved collection.
+
 ## 🖼️ `download_covers.py` - Batch Cover Downloads
 
 Download cover images for multiple albums:

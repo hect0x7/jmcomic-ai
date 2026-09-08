@@ -101,6 +101,9 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "get_album_comments",
                 "get_forum_comments",
                 "browse_albums",
+                "get_favorite_folders",
+                "browse_favorite_albums",
+                "add_favorite_album",
                 "download_album",
                 "download_photo",
                 "download_cover",
@@ -211,7 +214,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
         async def logging_callback(params):
             """捕获服务端发送的日志通知"""
             level = params.level
-            message = params.data if hasattr(params, 'data') else str(params)
+            message = params.data if hasattr(params, "data") else str(params)
             progress_events.append(f"[{level}] {message}")
             print(f"  📊 Progress: [{level}] {message}")
 
@@ -239,7 +242,9 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
         """Test update_option tool"""
         async with self._mcp_session() as session:
             print("\n=== Testing update_option ===")
-            result = await session.call_tool("update_option", {"option_updates": {"download": {"threading": {"image": 30}}}})
+            result = await session.call_tool(
+                "update_option", {"option_updates": {"download": {"threading": {"image": 30}}}}
+            )
             print(f"  Result: {result}")
             self.assertIsNotNone(result)
             print("\n[OK] update_option executed successfully")

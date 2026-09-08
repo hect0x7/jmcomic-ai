@@ -18,7 +18,17 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from jmcomic import JmAlbumComment, JmAlbumCommentPage, JmcomicClient, JmModuleConfig, JmOption, jm_log, jm_task_context
+from jmcomic import (
+    JmAlbumComment,
+    JmAlbumCommentPage,
+    JmApiClient,
+    JmApiResp,
+    JmcomicClient,
+    JmModuleConfig,
+    JmOption,
+    jm_log,
+    jm_task_context,
+)
 
 from jmcomic_ai.core import (
     GLOBAL_LOG_HANDLER_NAME,
@@ -139,13 +149,9 @@ class TestJmcomicCompatibility(unittest.TestCase):
             }
         }
         invalid_progress = {
-            "plugins": {
-                "after_init": [{"plugin": "download_progress", "kwargs": {"unknown_option": True}}]
-            }
+            "plugins": {"after_init": [{"plugin": "download_progress", "kwargs": {"unknown_option": True}}]}
         }
-        other_plugin = {
-            "plugins": {"after_init": [{"plugin": "usage_log", "kwargs": {"interval": 1}}]}
-        }
+        other_plugin = {"plugins": {"after_init": [{"plugin": "usage_log", "kwargs": {"interval": 1}}]}}
 
         self.assertFalse(list(validator.iter_errors(valid_progress)))
         self.assertTrue(list(validator.iter_errors(invalid_progress)))
@@ -264,6 +270,73 @@ class TestAlbumComments(unittest.TestCase):
         result = service._parse_search_page(search_page)
 
         self.assertEqual(6, result["page"])
+
+
+class TestFavorites(unittest.TestCase):
+    @staticmethod
+    def response(payload):
+        return SimpleNamespace(
+            status_code=200,
+            content=b"response",
+            text=json.dumps({"code": 200, "data": json.dumps(payload)}),
+        )
+
+    def setUp(self):
+        self.service = object.__new__(JmcomicService)
+        self.service.logger = Mock()
+        self.client = object.__new__(JmApiClient)
+        self.service.client = self.client
+        favorite_page = {
+            "list": [{"id": "123", "name": "Example album"}],
+            "folder_list": [{"FID": "4", "name": "Example folder"}],
+            "total": "1",
+            "count": 20,
+        }
+
+        self.client.get = Mock(return_value=self.response(favorite_page))
+        self.client.post = Mock(return_value=self.response({"status": "ok", "msg": "漫畫添加到您最喜愛的清單！"}))
+        decoded_data = patch.object(JmApiResp, "decoded_data", property(lambda response: response.encoded_data))
+        decoded_data.start()
+        self.addCleanup(decoded_data.stop)
+
+    def test_favorite_directory_and_browse_responses(self):
+        self.assertEqual({"folders": [{"id": "4", "name": "Example folder"}]}, self.service.get_favorite_folders())
+        result = self.service.browse_favorite_albums(folder_id="4")
+
+        self.assertEqual((1, 1, "4"), (result["total_count"], result["page"], result["folder_id"]))
+        self.assertEqual(1, len(result["albums"]))
+        album = result["albums"][0]
+        self.assertEqual(("123", "Example album", []), (album["id"], album["title"], album["tags"]))
+        self.assertTrue(album["cover_url"])
+
+    def test_add_favorite_success_response(self):
+        self.client.get.return_value = self.response({"id": 456, "is_favorite": False})
+
+        result = self.service.add_favorite_album("456")
+
+        self.assertEqual(
+            {"status": "success", "album_id": "456", "folder_id": "0", "message": "漫畫添加到您最喜愛的清單！"},
+            result,
+        )
+
+    def test_add_existing_favorite_response(self):
+        self.client.get.return_value = self.response({"id": 123, "is_favorite": True})
+        self.client.post.return_value = self.response({"status": "ok", "msg": "已移除收藏"})
+
+        result = self.service.add_favorite_album("123")
+
+        self.assertEqual(
+            {"status": "success", "album_id": "123", "folder_id": "0", "message": "已收藏，无需重复添加"},
+            result,
+        )
+
+    def test_add_favorite_list_response_returns_error(self):
+        self.client.post.return_value = self.client.get.return_value
+        self.client.get.return_value = self.response({"id": 456, "is_favorite": False})
+
+        result = self.service.add_favorite_album("456")
+
+        self.assertEqual({"status": "error", "album_id": "456", "folder_id": "0", "message": "'status'"}, result)
 
 
 class TestPostProcessCompatibility(unittest.TestCase):

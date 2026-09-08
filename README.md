@@ -185,6 +185,21 @@ skills/jmcomic/
 | `get_album_comments` | 获取评论、剧透标记与多层回复 | `album_id`, `page` |
 | `get_forum_comments` | 获取全站最新评论及来源本子 | `page` |
 
+### 收藏
+
+| 工具 | 功能 | 关键参数 |
+|:---|:---|:---|
+| `get_favorite_folders` | 获取收藏夹目录（`id`、`name`） | `username` |
+| `browse_favorite_albums` | 分页浏览收藏，返回本子摘要及总数 | `folder_id`, `page`, `order_by`, `username` |
+| `add_favorite_album` | 添加收藏，返回操作状态及结果消息 | `album_id`, `folder_id` |
+
+收藏工具需要有效的登录会话或 Cookie。HTML 客户端仅配置 Cookie 时，查询还需传入 `username`；
+通过同一 MCP 会话的 `login` 登录后可省略。API 客户端忽略 `username`，只查询当前登录账户。
+浏览时 `folder_id="0"` 表示全部收藏；添加时 `"0"` 使用上游默认行为，指定其他收藏夹仅支持 HTML 客户端，
+API 客户端会在请求前返回错误。添加返回 `status`、`album_id`、`folder_id`、`message`，
+API 客户端先查询本子详情中的收藏状态，已收藏时返回 `success` 和“已收藏，无需重复添加”，未收藏才发送添加请求；
+查询失败时返回错误。HTML 客户端保留上游添加行为，包括重复收藏的错误。
+
 ### 下载
 
 | 工具 | 功能 | 关键特性 |

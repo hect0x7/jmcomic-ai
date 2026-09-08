@@ -19,6 +19,8 @@ from jmcomic import (
     JmAlbumComment,
     JmAlbumCommentPage,
     JmAlbumDetail,
+    JmApiClient,
+    JmApiResp,
     JmCategoryPage,
     JmcomicClient,
     JmcomicText,
@@ -42,9 +44,7 @@ DEFAULT_LOG_PATH = Path.home() / ".jmcomic-ai" / "jmcomic_ai.log"
 DEFAULT_TASK_LOG_DIR = Path.home() / ".jmcomic-ai" / "logs"
 GLOBAL_LOG_HANDLER_NAME = "jmcomic-ai-global-file"
 
-# Shared friendly-vocabulary -> JmMagicConstants mappings.
-# Used by both search_album and browse_albums so the order_by / time_range
-# vocabulary stays identical across the two tools (DRY).
+# Shared friendly-vocabulary mappings for search and browsing.
 ORDER_BY_MAP: dict[str, str] = {
     "latest": JmMagicConstants.ORDER_BY_LATEST,  # mr
     "likes": JmMagicConstants.ORDER_BY_LIKE,  # tf
@@ -169,11 +169,13 @@ class _McpDownloaderBase(JmDownloader):  # type: ignore[misc, valid-type]
         if self.ctx:
             try:
                 future = asyncio.run_coroutine_threadsafe(coro_func(), self.loop)
+
                 def _on_done(f: Any) -> None:
                     try:
                         f.result()
                     except Exception as e:
                         self.service_logger.warning(f"{error_msg_prefix}: {e}")
+
                 future.add_done_callback(_on_done)
             except Exception as e:
                 self.service_logger.warning(f"{error_msg_prefix}: {e}")
@@ -208,10 +210,7 @@ class McpProgressDownloader(_McpDownloaderBase):
     def before_photo(self, photo: Any) -> None:
         super().before_photo(photo)
         with self.lock:
-            self.photo_progress[photo.photo_id] = {
-                "current": 0,
-                "total": len(photo)
-            }
+            self.photo_progress[photo.photo_id] = {"current": 0, "total": len(photo)}
         msg = f"📖 Starting chapter: {photo.photo_id} - {photo.name} ({len(photo)} pages)"
         self.service_logger.info(msg)
         self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send chapter start to ctx")
@@ -276,10 +275,9 @@ class McpPhotoProgressDownloader(_McpDownloaderBase):
         self.service_logger.info(msg)
         if self.ctx:
             self._safe_ctx_call(lambda: self.ctx.info(msg), "Failed to send download progress to ctx")
-            if hasattr(self.ctx, 'report_progress') and self.total > 0:
+            if hasattr(self.ctx, "report_progress") and self.total > 0:
                 self._safe_ctx_call(
-                    lambda: self.ctx.report_progress(self.current, self.total),
-                    "Failed to report progress to ctx"
+                    lambda: self.ctx.report_progress(self.current, self.total), "Failed to report progress to ctx"
                 )
 
 
@@ -305,19 +303,11 @@ def _build_progress_downloaders(
     """
     return (
         functools.partial(
-            McpProgressDownloader,
-            ctx=ctx,
-            loop=loop,
-            service_logger=service_logger,
-            threading_mod=threading_mod
+            McpProgressDownloader, ctx=ctx, loop=loop, service_logger=service_logger, threading_mod=threading_mod
         ),
         functools.partial(
-            McpPhotoProgressDownloader,
-            ctx=ctx,
-            loop=loop,
-            service_logger=service_logger,
-            threading_mod=threading_mod
-        )
+            McpPhotoProgressDownloader, ctx=ctx, loop=loop, service_logger=service_logger, threading_mod=threading_mod
+        ),
     )
 
 
@@ -403,9 +393,7 @@ class JmcomicService:
 
     def _setup_logging(self, log_path: str | None = None):
         """Route jmcomic and jmcomic_ai logs to one global file only."""
-        self.log_path = Path(
-            log_path or os.getenv(ENV_LOG_PATH) or DEFAULT_LOG_PATH
-        ).expanduser().resolve()
+        self.log_path = Path(log_path or os.getenv(ENV_LOG_PATH) or DEFAULT_LOG_PATH).expanduser().resolve()
         self.logger = logging.getLogger("jmcomic_ai")
         global_handler = _get_global_file_handler(self.log_path)
         _configure_logger_file_only(logging.getLogger(), global_handler)
@@ -654,11 +642,7 @@ class JmcomicService:
         return self._parse_search_page(search_page)
 
     def browse_albums(
-        self,
-        category: str = "all",
-        time_range: str = "all",
-        order_by: str = "latest",
-        page: int = 1
+        self, category: str = "all", time_range: str = "all", order_by: str = "latest", page: int = 1
     ) -> dict[str, Any]:
         """
         浏览、过滤、排行本子，支持灵活的分类、时间范围和排序选项。
@@ -919,6 +903,127 @@ class JmcomicService:
             self.logger.error(f"Login failed for {username}: {str(e)}")
             return f"Login failed: {str(e)}"
 
+    def get_favorite_folders(self, username: str = "") -> dict[str, Any]:
+        """
+        获取已登录账户的收藏夹目录。
+
+        参数:
+            username: HTML 客户端仅配置 Cookie 时必须提供用户名；通过 login 登录后可省略。
+                API 客户端忽略此参数，始终查询当前登录账户。
+
+        返回:
+            folders: 收藏夹列表，每项包含字符串 id 和 name；无收藏夹时为空列表。
+                查询全部收藏时使用 folder_id="0"，该值不一定出现在目录中。
+        """
+        favorite_page = self.get_client().favorite_folder(username=username)
+        folders = [
+            {"id": str(folder_id), "name": str(folder_name)}
+            for folder_id, folder_name in favorite_page.iter_folder_id_name()
+        ]
+        self.logger.info(f"Favorite folders fetched: count={len(folders)}")
+        return {"folders": folders}
+
+    def browse_favorite_albums(
+        self,
+        folder_id: str = "0",
+        page: int = 1,
+        order_by: str = "latest",
+        username: str = "",
+    ) -> dict[str, Any]:
+        """
+        分页浏览已登录账户的收藏，返回轻量本子摘要。
+
+        参数:
+            folder_id: 收藏夹 ID，"0" 表示全部收藏（默认值："0"）。
+            page: 页码，从 1 开始（默认值：1）。
+            order_by: 排序方式，沿用 browse_albums 的映射：latest、likes、views、pictures、
+                score、comments（默认值：latest）；实际排序效果由上游客户端决定。
+            username: HTML 客户端仅配置 Cookie 时必须提供用户名；通过 login 登录后可省略。
+                API 客户端忽略此参数，始终查询当前登录账户。
+
+        返回:
+            albums: 本子摘要列表，包含 id、title、tags、cover_url。
+            total_count: 收藏总数。
+            page: 当前页码。
+            folder_id: 查询的收藏夹 ID。
+            error: 页码、收藏夹 ID 或排序参数无效时的错误信息（可选）。
+        """
+        order_value = ORDER_BY_MAP.get(order_by.lower())
+        error_msg = None
+        if page < 1:
+            error_msg = "page must be greater than or equal to 1"
+        elif not folder_id.isascii() or not folder_id.isdecimal():
+            error_msg = "folder_id must be a non-negative numeric ID"
+        elif order_value is None:
+            error_msg = f"Invalid order_by: {order_by}. Valid options: {', '.join(ORDER_BY_MAP)}"
+
+        if error_msg is not None:
+            self.logger.error(error_msg)
+            return {"albums": [], "total_count": 0, "page": page, "folder_id": folder_id, "error": error_msg}
+
+        favorite_page = self.get_client().favorite_folder(
+            folder_id=folder_id,
+            page=page,
+            order_by=order_value,
+            username=username,
+        )
+        result = self._parse_search_page(favorite_page)
+        result["folder_id"] = folder_id
+        self.logger.info(f"Favorite albums fetched: folder_id={folder_id}, page={page}, count={len(result['albums'])}")
+        return result
+
+    def add_favorite_album(self, album_id: str, folder_id: str = "0") -> dict[str, Any]:
+        """
+        将本子加入当前登录账户的收藏夹，需要有效的登录会话或 Cookie。
+        API 客户端先查询本子当前的收藏状态，已收藏时直接返回成功，否则发送添加请求。
+
+        参数:
+            album_id: 本子 ID，也支持 JM 前缀或本子链接。
+            folder_id: 收藏夹 ID，"0" 使用上游默认行为；指定收藏夹仅支持 HTML 客户端。
+                API 客户端传入非 "0" 值时会在请求前返回错误。
+
+        返回:
+            status: "success" 或 "error"；API 查询到已收藏时也返回 success。
+            album_id: 本子 ID，成功解析后为纯数字字符串。
+            folder_id: 请求的收藏夹 ID；API 的 "0" 不代表已验证的实际归属。
+            message: 已收藏提示、上游结果消息或错误说明。
+                HTML 客户端的重复收藏错误保留上游行为。
+        """
+        parsed_album_id = album_id
+        try:
+            parsed_album_id = JmcomicText.parse_to_jm_id(album_id)
+            if not parsed_album_id.isascii() or not parsed_album_id.isdecimal() or int(parsed_album_id) < 1:
+                raise ValueError("album_id must resolve to a positive numeric ID")
+            if not folder_id.isascii() or not folder_id.isdecimal():
+                raise ValueError("folder_id must be a non-negative numeric ID")
+
+            client = self.get_client()
+            if client.is_given_type(JmApiClient):
+                if folder_id != "0":
+                    raise ValueError(
+                        "The API client does not support folder_id for adding favorites; use the HTML client."
+                    )
+                album_response = client.req_api(client.API_ALBUM, params={"id": parsed_album_id})
+                if album_response.model_data["is_favorite"]:
+                    self.logger.info(f"Album already in favorites: album_id={parsed_album_id}")
+                    return {
+                        "status": "success",
+                        "album_id": parsed_album_id,
+                        "folder_id": folder_id,
+                        "message": "已收藏，无需重复添加",
+                    }
+                response = client.req_api("/favorite", get=False, data={"aid": parsed_album_id})
+                client.require_resp_status_ok(response)
+            else:
+                response = client.add_favorite_album(parsed_album_id, folder_id=folder_id)
+            response_data = response.model_data if isinstance(response, JmApiResp) else response.json()
+            message = str(response_data.get("msg") or "Favorite request succeeded.")
+            self.logger.info(f"Favorite request succeeded: album_id={parsed_album_id}, folder_id={folder_id}")
+            return {"status": "success", "album_id": parsed_album_id, "folder_id": folder_id, "message": message}
+        except Exception as e:
+            self.logger.error(f"Favorite request failed: album_id={parsed_album_id}, folder_id={folder_id}: {e}")
+            return {"status": "error", "album_id": parsed_album_id, "folder_id": folder_id, "message": str(e)}
+
     def get_album_detail(self, album_id: str) -> dict[str, Any]:
         """
         获取特定本子的详细信息。
@@ -1068,9 +1173,8 @@ class JmcomicService:
 
                 images = []
                 for file in sorted(photo_dir.iterdir()):
-                    if (
-                        file.suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp', '.gif')
-                        and not file.name.startswith('.')
+                    if file.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".gif") and not file.name.startswith(
+                        "."
                     ):
                         images.append((str(file), None))
 
@@ -1088,7 +1192,7 @@ class JmcomicService:
                     "output_path": "",
                     "output_paths": [],
                     "is_directory": False,
-                    "message": f"Error: No downloaded images found for album {album_id}."
+                    "message": f"Error: No downloaded images found for album {album_id}.",
                 }
 
             mock_downloader.download_success_dict[album] = photo_dict
@@ -1104,27 +1208,27 @@ class JmcomicService:
                     "output_path": "",
                     "output_paths": [],
                     "is_directory": False,
-                    "message": f"Plugin '{process_type}' not found."
+                    "message": f"Plugin '{process_type}' not found.",
                 }
 
             actual_params = params.copy() if params else {}
 
-            dir_rule = actual_params.get('dir_rule')
-            if isinstance(dir_rule, dict) and 'base_dir' in dir_rule:
-                actual_params['dir_rule'] = {
+            dir_rule = actual_params.get("dir_rule")
+            if isinstance(dir_rule, dict) and "base_dir" in dir_rule:
+                actual_params["dir_rule"] = {
                     **dir_rule,
-                    'base_dir': str(Path(dir_rule['base_dir']).expanduser()),
+                    "base_dir": str(Path(dir_rule["base_dir"]).expanduser()),
                 }
 
-            for path_param in ('zip_dir', 'pdf_dir', 'img_dir'):
+            for path_param in ("zip_dir", "pdf_dir", "img_dir"):
                 if path_param in actual_params and actual_params[path_param] is not None:
                     actual_params[path_param] = str(Path(actual_params[path_param]).expanduser())
 
-            if 'filename_rule' not in actual_params:
-                photo_level_zip = process_type == 'zip' and actual_params.get('level') == 'photo'
-                actual_params['filename_rule'] = 'Ptitle' if photo_level_zip else 'Aid'
+            if "filename_rule" not in actual_params:
+                photo_level_zip = process_type == "zip" and actual_params.get("level") == "photo"
+                actual_params["filename_rule"] = "Ptitle" if photo_level_zip else "Aid"
 
-            actual_params.update({'album': album, 'downloader': mock_downloader})
+            actual_params.update({"album": album, "downloader": mock_downloader})
 
             # Instantiate and invoke
             plugin = pclass.build(self.option)
@@ -1146,7 +1250,7 @@ class JmcomicService:
                 "output_path": output_path,
                 "output_paths": output_paths,
                 "is_directory": is_directory,
-                "message": f"Post-process '{process_type}' completed successfully."
+                "message": f"Post-process '{process_type}' completed successfully.",
             }
 
         except Exception as e:
@@ -1158,5 +1262,5 @@ class JmcomicService:
                 "output_path": "",
                 "output_paths": [],
                 "is_directory": False,
-                "message": f"Post-process failed: {e}"
+                "message": f"Post-process failed: {e}",
             }
