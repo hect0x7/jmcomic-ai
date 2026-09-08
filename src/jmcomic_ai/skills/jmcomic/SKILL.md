@@ -157,8 +157,9 @@ For API clients, the service fetches `/album` directly to read the current `is_f
 If the album is already saved, it returns `success` with `message="已收藏，无需重复添加"` without sending
 an add request. Otherwise it sends the request and preserves the upstream business status and message.
 A failed lookup returns an error.
-HTML clients retain upstream behavior, including errors for duplicate additions. The API check and
-add are separate requests; concurrent changes from other callers can still affect the result.
+HTML clients retain upstream behavior, including errors for duplicate additions. API check-and-add
+operations are serialized across service instances in the same process. Other processes or external
+clients can still change the state between the two requests.
 Use the browsing tool to inspect the result. These tools do not remove favorites, move albums, or
 create folders.
 

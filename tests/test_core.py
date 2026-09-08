@@ -14,7 +14,9 @@ import os
 import tempfile
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier, BrokenBarrierError, Lock
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -337,6 +339,47 @@ class TestFavorites(unittest.TestCase):
         result = self.service.add_favorite_album("456")
 
         self.assertEqual({"status": "error", "album_id": "456", "folder_id": "0", "message": "'status'"}, result)
+
+    def test_concurrent_adds_keep_album_favorited(self):
+        """Concurrent callers sharing an account only toggle the favorite once."""
+        reads = Barrier(2)
+        state_lock = Lock()
+        favorite = False
+
+        def read_favorite(*args, **kwargs):
+            with state_lock:
+                is_favorite = favorite
+            try:
+                reads.wait(timeout=0.5)
+            except BrokenBarrierError:
+                pass
+            return self.response({"id": 123, "is_favorite": is_favorite})
+
+        def toggle_favorite(*args, **kwargs):
+            nonlocal favorite
+            with state_lock:
+                favorite = not favorite
+            return self.response({"status": "ok", "msg": "Favorite toggled"})
+
+        self.client.get.side_effect = read_favorite
+        self.client.post.side_effect = toggle_favorite
+        other_service = object.__new__(JmcomicService)
+        other_service.logger = Mock()
+        other_service.client = object.__new__(JmApiClient)
+        other_service.client.get = self.client.get
+        other_service.client.post = self.client.post
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(self.service.add_favorite_album, "123"),
+                executor.submit(other_service.add_favorite_album, "JM123"),
+            ]
+            results = [future.result(timeout=5) for future in futures]
+
+        self.assertTrue(favorite)
+        self.client.post.assert_called_once()
+        self.assertTrue(all(result["status"] == "success" for result in results))
+        self.assertEqual(1, sum(result["message"] == "已收藏，无需重复添加" for result in results))
 
 
 class TestPostProcessCompatibility(unittest.TestCase):

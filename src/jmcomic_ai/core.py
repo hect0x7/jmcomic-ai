@@ -7,6 +7,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from uuid import uuid4
 
@@ -43,6 +44,7 @@ DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
 DEFAULT_LOG_PATH = Path.home() / ".jmcomic-ai" / "jmcomic_ai.log"
 DEFAULT_TASK_LOG_DIR = Path.home() / ".jmcomic-ai" / "logs"
 GLOBAL_LOG_HANDLER_NAME = "jmcomic-ai-global-file"
+_FAVORITE_LOCK = Lock()
 
 # Shared friendly-vocabulary mappings for search and browsing.
 ORDER_BY_MAP: dict[str, str] = {
@@ -976,6 +978,7 @@ class JmcomicService:
         """
         将本子加入当前登录账户的收藏夹，需要有效的登录会话或 Cookie。
         API 客户端先查询本子当前的收藏状态，已收藏时直接返回成功，否则发送添加请求。
+        同一进程内的 API 收藏添加串行执行；其他进程或外部客户端的操作仍可能影响结果。
 
         参数:
             album_id: 本子 ID，也支持 JM 前缀或本子链接。
@@ -1003,17 +1006,18 @@ class JmcomicService:
                     raise ValueError(
                         "The API client does not support folder_id for adding favorites; use the HTML client."
                     )
-                album_response = client.req_api(client.API_ALBUM, params={"id": parsed_album_id})
-                if album_response.model_data["is_favorite"]:
-                    self.logger.info(f"Album already in favorites: album_id={parsed_album_id}")
-                    return {
-                        "status": "success",
-                        "album_id": parsed_album_id,
-                        "folder_id": folder_id,
-                        "message": "已收藏，无需重复添加",
-                    }
-                response = client.req_api("/favorite", get=False, data={"aid": parsed_album_id})
-                client.require_resp_status_ok(response)
+                with _FAVORITE_LOCK:
+                    album_response = client.req_api(client.API_ALBUM, params={"id": parsed_album_id})
+                    if album_response.model_data["is_favorite"]:
+                        self.logger.info(f"Album already in favorites: album_id={parsed_album_id}")
+                        return {
+                            "status": "success",
+                            "album_id": parsed_album_id,
+                            "folder_id": folder_id,
+                            "message": "已收藏，无需重复添加",
+                        }
+                    response = client.req_api("/favorite", get=False, data={"aid": parsed_album_id})
+                    client.require_resp_status_ok(response)
             else:
                 response = client.add_favorite_album(parsed_album_id, folder_id=folder_id)
             response_data = response.model_data if isinstance(response, JmApiResp) else response.json()

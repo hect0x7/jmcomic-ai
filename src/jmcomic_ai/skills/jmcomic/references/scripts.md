@@ -262,6 +262,8 @@ HTML client; API clients reject them before sending a request.
 Prints `status`, `album_id`, `folder_id`, and `message` as JSON to stdout. For API clients, the service
 checks `is_favorite` in a fresh album detail response before adding. An existing album returns
 `status="success"` with `message="已收藏，无需重复添加"` and skips the add request. Lookup failures return an error.
+API check-and-add operations are serialized within one process; separate script processes and external
+clients can still change the state concurrently.
 HTML clients retain upstream behavior, including errors for duplicate additions. `status="error"`
 exits with code 1. The returned folder ID echoes the request; it does not verify API default placement.
 Use `favorite_albums.py` to inspect the saved collection.

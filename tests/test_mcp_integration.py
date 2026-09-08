@@ -1,29 +1,117 @@
 """
 MCP Integration Tests - Real Server & Client Testing
 
-This module tests all MCP tools and resources using real SSE transport.
-Uses the official MCP Python SDK client for proper SSE handling.
-No mocking - actual MCP server is started and client connects to it.
+This module tests MCP tools and resources using real SSE and stdio transports.
+Favorite stdio tests use a controlled client without account or network access.
 
 Usage:
     python tests/test_mcp_integration.py
 """
 
 import contextlib
+import json
 import socket
+import sys
+import tempfile
 import time
 import unittest
+from datetime import timedelta
 from multiprocessing import Process
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-from mcp import ClientSession
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
+from mcp.client.stdio import stdio_client
 
 # Test constants
 TEST_ALBUM_ID = "123"
 TEST_SEARCH_KEYWORD = "全彩"
 TEST_HOST = "127.0.0.1"
 TEST_PORT = 18901
+
+
+def _start_favorite_stdio_server(log_path: str):
+    """Run the real MCP server with controlled favorite responses."""
+    from jmcomic import JmApiClient
+
+    from jmcomic_ai.core import JmcomicService
+    from jmcomic_ai.mcp.server import run_server
+
+    service = object.__new__(JmcomicService)
+    service._setup_logging(log_path)
+    client = Mock(spec=JmApiClient)
+    client.is_given_type.return_value = True
+    client.favorite_folder.return_value = SimpleNamespace(
+        content=[("123", {"name": "Example album", "tags": []})],
+        total=1,
+        page_number=2,
+        iter_folder_id_name=lambda: iter([("4", "Example folder")]),
+    )
+    client.req_api.return_value = Mock(
+        model_data={"is_favorite": False},
+        json=Mock(return_value={"msg": "Favorite added"}),
+    )
+    service.client = client
+    run_server("stdio", service)
+
+
+class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
+    async def test_favorite_tools_over_stdio(self):
+        """Favorite tools decode arguments and return structured JSON over stdio."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            server = StdioServerParameters(
+                command=sys.executable,
+                args=[
+                    "-B",
+                    "-c",
+                    "import sys; from tests.test_mcp_integration import _start_favorite_stdio_server; "
+                    "_start_favorite_stdio_server(sys.argv[1])",
+                    str(Path(temp_dir) / "mcp.log"),
+                ],
+                cwd=str(Path(__file__).resolve().parents[1]),
+            )
+            async with stdio_client(server) as (read_stream, write_stream):
+                async with ClientSession(
+                    read_stream, write_stream, read_timeout_seconds=timedelta(seconds=10)
+                ) as session:
+                    await session.initialize()
+                    cases = [
+                        (
+                            "get_favorite_folders",
+                            {"username": "example"},
+                            {"folders": [{"id": "4", "name": "Example folder"}]},
+                        ),
+                        (
+                            "browse_favorite_albums",
+                            {"folder_id": "4", "page": 2},
+                            {"total_count": 1, "page": 2, "folder_id": "4"},
+                        ),
+                        (
+                            "add_favorite_album",
+                            {"album_id": "JM123"},
+                            {"status": "success", "album_id": "123", "message": "Favorite added"},
+                        ),
+                        (
+                            "browse_favorite_albums",
+                            {"page": 0},
+                            {"albums": [], "error": "page must be greater than or equal to 1"},
+                        ),
+                        (
+                            "add_favorite_album",
+                            {"album_id": "0"},
+                            {"status": "error", "message": "album_id must resolve to a positive numeric ID"},
+                        ),
+                    ]
+                    for name, arguments, expected in cases:
+                        with self.subTest(tool=name, arguments=arguments):
+                            result = await session.call_tool(name, arguments)
+                            self.assertFalse(result.isError, result.content)
+                            self.assertIsInstance(result.structuredContent, dict)
+                            self.assertEqual(result.structuredContent, json.loads(result.content[0].text))
+                            for key, value in expected.items():
+                                self.assertEqual(value, result.structuredContent[key])
 
 
 def _start_mcp_server(port: int):
