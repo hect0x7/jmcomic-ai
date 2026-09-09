@@ -268,6 +268,19 @@ HTML clients retain upstream behavior, including errors for duplicate additions.
 exits with code 1. The returned folder ID echoes the request; it does not verify API default placement.
 Use `favorite_albums.py` to inspect the saved collection.
 
+### `remove_favorite_album.py` - Remove a Favorite
+
+```bash
+python scripts/remove_favorite_album.py --id 123456
+python scripts/remove_favorite_album.py --id JM123456 --folder-id 123 --option /path/to/html-option.yml
+```
+
+`--id` maps to `album_id`; `--folder-id` maps to `folder_id` and defaults to `"0"`. The upstream
+favorite endpoint is a toggle. API clients check `is_favorite` first and skip the request when the
+album is not saved; HTML clients call the toggle endpoint directly and should only be used for a
+currently favorited album. The script prints the structured result as JSON and exits with code 1 on
+`status="error"`.
+
 ## 🖼️ `download_covers.py` - Batch Cover Downloads
 
 Download cover images for multiple albums:

@@ -1,6 +1,6 @@
 ---
 name: jmcomic
-description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse and add favorites, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
+description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse, add, and remove favorites, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
 ---
 
 # JMComic Skill
@@ -13,7 +13,7 @@ Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
 - Read album-specific or site-wide comments and nested replies, including spoiler flags
-- List favorite folders, browse saved albums, or add an album to favorites
+- List favorite folders, browse saved albums, add an album to favorites, or remove an album from favorites
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
@@ -160,13 +160,30 @@ A failed lookup returns an error.
 HTML clients retain upstream behavior, including errors for duplicate additions. API check-and-add
 operations are serialized across service instances in the same process. Other processes or external
 clients can still change the state between the two requests.
-Use the browsing tool to inspect the result. These tools do not remove favorites, move albums, or
-create folders.
+Use the browsing tool to inspect the result. These tools do not move albums or create folders.
 
 After adding favorites, list each successfully added album in the final response as `title (ID)`.
 Reuse titles from earlier search, browse, or detail results; fetch missing titles with
 `get_album_detail` or `python scripts/album_info.py --id ID` (`--ids` for multiple albums).
 Label albums reported as already saved as `已收藏`; report failed additions with their error messages.
+
+**`remove_favorite_album(album_id: str, folder_id: str = "0")`** returns the same structured fields as
+`add_favorite_album`:
+
+```python
+{
+    "status": "success" | "error",
+    "album_id": str,
+    "folder_id": str,
+    "message": str
+}
+```
+
+The upstream endpoint is a toggle. For API clients, the service checks `is_favorite` first and returns
+`status="success"` with `message="未收藏，无需移除"` when the album is already absent; otherwise it
+sends one toggle request. API clients reject non-default folder IDs. HTML clients call the upstream
+toggle endpoint directly, so only use this operation when the album is currently favorited.
+`status="error"` reports validation, authentication, or request failures.
 
 ## Core Capabilities
 
@@ -290,6 +307,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `favorite_folders.py` | List favorite folders as JSON; supports `--username`, `--output`, and `--option`. |
 | `favorite_albums.py` | Browse one page of favorites as JSON; supports folder, page, sort, and username filters. |
 | `add_favorite_album.py` | Add one favorite and print its structured result as JSON; failures exit non-zero. |
+| `remove_favorite_album.py` | Remove one favorite and print its structured result as JSON; failures exit non-zero. |
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
 | `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
@@ -309,6 +327,7 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `favorite_folders.py` | `get_favorite_folders` | High | `--username` maps to `username`; JSON preserves the MCP result shape. |
 | `favorite_albums.py` | `browse_favorite_albums` | High | `--folder-id`, `--page`, `--order-by`, `--username` map to the corresponding tool arguments. |
 | `add_favorite_album.py` | `add_favorite_album` | High | `--id` maps to `album_id`, `--folder-id` to `folder_id`; an error result exits non-zero. |
+| `remove_favorite_album.py` | `remove_favorite_album` | High | `--id` maps to `album_id`, `--folder-id` to `folder_id`; an error result exits non-zero. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
 | `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |

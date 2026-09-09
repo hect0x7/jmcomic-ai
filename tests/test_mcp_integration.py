@@ -94,6 +94,11 @@ class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
                             {"status": "success", "album_id": "123", "message": "Favorite added"},
                         ),
                         (
+                            "remove_favorite_album",
+                            {"album_id": "JM123"},
+                            {"status": "success", "album_id": "123", "message": "未收藏，无需移除"},
+                        ),
+                        (
                             "browse_favorite_albums",
                             {"page": 0},
                             {"albums": [], "error": "page must be greater than or equal to 1"},
@@ -192,6 +197,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "get_favorite_folders",
                 "browse_favorite_albums",
                 "add_favorite_album",
+                "remove_favorite_album",
                 "download_album",
                 "download_photo",
                 "download_cover",

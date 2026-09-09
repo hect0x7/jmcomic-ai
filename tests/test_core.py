@@ -340,6 +340,29 @@ class TestFavorites(unittest.TestCase):
 
         self.assertEqual({"status": "error", "album_id": "456", "folder_id": "0", "message": "'status'"}, result)
 
+    def test_remove_favorite_success_response(self):
+        self.client.get.return_value = self.response({"id": 456, "is_favorite": True})
+        self.client.post.return_value = self.response({"status": "ok", "msg": "Favorite removed"})
+
+        result = self.service.remove_favorite_album("JM456")
+
+        self.assertEqual(
+            {"status": "success", "album_id": "456", "folder_id": "0", "message": "Favorite removed"},
+            result,
+        )
+
+    def test_remove_missing_favorite_response(self):
+        self.client.get.return_value = self.response({"id": 456, "is_favorite": False})
+
+        result = self.service.remove_favorite_album("456")
+
+        self.assertEqual(
+            {"status": "success", "album_id": "456", "folder_id": "0", "message": "未收藏，无需移除"},
+            result,
+        )
+        self.assertEqual(1, self.client.get.call_count)
+        self.client.post.assert_not_called()
+
     def test_concurrent_adds_keep_album_favorited(self):
         """Concurrent callers sharing an account only toggle the favorite once."""
         reads = Barrier(2)
