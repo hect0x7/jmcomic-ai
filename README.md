@@ -40,8 +40,8 @@
 | 下载并生成 PDF / ZIP | 搜索本子 | 查看本子详情 | 查看排行榜 |
 | :---: | :---: | :---: | :---: |
 | ![Download and PDF](images/sample_download_album_convert_pdf.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Month Ranking by Likes](images/sample_month_ranking_by_score.png) |
-| **修改下载配置** | **查看评论** | | |
-| ![Update Option](images/sample_update_option.png) | ![Get Album Comments](images/sample_get_comment.png) | | |
+| **修改下载配置** | **查看评论** | **添加收藏** | |
+| ![Update Option](images/sample_update_option.png) | ![Get Album Comments](images/sample_get_comment.png) | ![Add Favorite Album](images/sample_add_favorite_album.jpg) | |
 
 ---
 
@@ -145,7 +145,7 @@ skills/jmcomic/
 │   ├── ecosystem.md                # APK 获取、本地阅读与下载后承接流程
 │   ├── scripts.md                  # 脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
-└── 📂 scripts/                     # 12 个即用 CLI 脚本
+└── 📂 scripts/                     # 16 个即用 CLI 脚本
     ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
@@ -154,6 +154,10 @@ skills/jmcomic/
     ├── album_info.py               # 📋 本子详情查询
     ├── album_comments.py           # 💬 评论与回复查询
     ├── forum_comments.py           # 🌐 全站最新评论查询
+    ├── favorite_folders.py         # 📁 获取收藏夹目录
+    ├── favorite_albums.py          # ⭐ 分页浏览收藏
+    ├── add_favorite_album.py       # ➕ 添加本子到收藏
+    ├── remove_favorite_album.py    # ➖ 从收藏移除本子
     ├── download_covers.py          # 🖼️ 批量下载封面
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
@@ -192,14 +196,7 @@ skills/jmcomic/
 | `get_favorite_folders` | 获取收藏夹目录（`id`、`name`） | `username` |
 | `browse_favorite_albums` | 分页浏览收藏，返回本子摘要及总数 | `folder_id`, `page`, `order_by`, `username` |
 | `add_favorite_album` | 添加收藏，返回操作状态及结果消息 | `album_id`, `folder_id` |
-
-收藏工具需要有效的登录会话或 Cookie。HTML 客户端仅配置 Cookie 时，查询还需传入 `username`；
-通过同一 MCP 会话的 `login` 登录后可省略。API 客户端忽略 `username`，只查询当前登录账户。
-浏览时 `folder_id="0"` 表示全部收藏；添加时 `"0"` 使用上游默认行为，指定其他收藏夹仅支持 HTML 客户端，
-API 客户端会在请求前返回错误。添加返回 `status`、`album_id`、`folder_id`、`message`，
-API 客户端先查询本子详情中的收藏状态，已收藏时返回 `success` 和“已收藏，无需重复添加”，未收藏才发送添加请求；
-同一进程内的 API 收藏添加串行执行，查询失败时返回错误。其他进程或外部客户端的并发操作仍可能影响结果。
-HTML 客户端保留上游添加行为，包括重复收藏的错误。
+| `remove_favorite_album` | 移除收藏，返回操作状态及结果消息 | `album_id`, `folder_id` |
 
 ### 下载
 
