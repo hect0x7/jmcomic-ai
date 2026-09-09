@@ -48,11 +48,16 @@ git clone --depth 1 https://github.com/hect0x7/JMComic-Crawler-Python.git refere
 
 ### 提交代码
 
-1. Fork 本仓库
-2. 创建你的特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交你的更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+1. Fork 本仓库，并在自己的 Fork 中启用 GitHub Actions。
+2. 建议基于上游最新 `master` 创建或更新自己的 `dev` 分支，在该分支完成本次贡献。
+3. 提交更改，并推送到自己的 Fork (`git push origin dev`)。
+4. 在 Fork 的 Actions 页面确认当前提交的 `Run Tests`（全部平台）和 `Run Mypy Checks` 均通过；若路径过滤未触发检查，手动运行这两个工作流并选择 `dev`。
+5. 验证通过后，再创建从 `你的 Fork:dev` 到 `hect0x7/jmcomic-ai:master` 的 PR，并在 PR 描述中附上对应提交的检查链接。
+
+以 `master` 或 `dev` 为目标的 PR，在创建、追加提交或重新打开时会自动运行测试和 MyPy 检查，
+包括来自 Fork 的 PR；根据仓库审批策略，外部贡献者的工作流可能需要维护者批准后才运行。
+检查默认验证 PR 与目标分支的模拟合并结果，不会触发发布，也不能替代提交 PR 前在 Fork 中的验证。
+新加入触发器后，已打开的 PR 需要追加提交或关闭后重新打开，才会触发检查。
 
 ### 代码规范
 
