@@ -21,7 +21,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Browse JMComic favorite albums")
     parser.add_argument("--folder-id", default="0", help="Favorite folder ID (default: 0, all favorites)")
     parser.add_argument("--page", type=int, default=1, help="Page number (default: 1)")
-    parser.add_argument("--order-by", default="latest", help="Sort: latest, likes, views, pictures, score, comments")
+    parser.add_argument("--order-by", default="favorite_time", help="Sort: favorite_time, update_time")
     parser.add_argument("--username", default="", help="Required for HTML queries with Cookie-only authentication")
     parser.add_argument("--output", help="Output JSON file (default: print to console)")
     parser.add_argument("--option", help="Path to option.yml file")

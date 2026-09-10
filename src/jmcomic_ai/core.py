@@ -7,7 +7,6 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
 from typing import Any
 from uuid import uuid4
 
@@ -44,7 +43,6 @@ DEFAULT_OPTION_PATH = Path.home() / ".jmcomic" / "option.yml"
 DEFAULT_LOG_PATH = Path.home() / ".jmcomic-ai" / "jmcomic_ai.log"
 DEFAULT_TASK_LOG_DIR = Path.home() / ".jmcomic-ai" / "logs"
 GLOBAL_LOG_HANDLER_NAME = "jmcomic-ai-global-file"
-_FAVORITE_LOCK = Lock()
 
 # Shared friendly-vocabulary mappings for search and browsing.
 ORDER_BY_MAP: dict[str, str] = {
@@ -62,6 +60,12 @@ TIME_RANGE_MAP: dict[str, str] = {
     "today": JmMagicConstants.TIME_TODAY,
     "week": JmMagicConstants.TIME_WEEK,
     "month": JmMagicConstants.TIME_MONTH,
+}
+
+# The favorites list has its own sort vocabulary upstream.
+FAVORITE_ORDER_BY_MAP: dict[str, str] = {
+    "favorite_time": JmMagicConstants.ORDER_FF_FAVORITE_TIME,  # mr
+    "update_time": JmMagicConstants.ORDER_FF_UPDATE_TIME,  # mp
 }
 
 
@@ -929,7 +933,7 @@ class JmcomicService:
         self,
         folder_id: str = "0",
         page: int = 1,
-        order_by: str = "latest",
+        order_by: str = "favorite_time",
         username: str = "",
     ) -> dict[str, Any]:
         """
@@ -938,8 +942,8 @@ class JmcomicService:
         参数:
             folder_id: 收藏夹 ID，"0" 表示全部收藏（默认值："0"）。
             page: 页码，从 1 开始（默认值：1）。
-            order_by: 排序方式，沿用 browse_albums 的映射：latest、likes、views、pictures、
-                score、comments（默认值：latest）；实际排序效果由上游客户端决定。
+            order_by: 排序方式，favorite_time 按收藏时间、update_time 按更新时间
+                （默认值：favorite_time）。
             username: HTML 客户端仅配置 Cookie 时必须提供用户名；通过 login 登录后可省略。
                 API 客户端忽略此参数，始终查询当前登录账户。
 
@@ -950,14 +954,14 @@ class JmcomicService:
             folder_id: 查询的收藏夹 ID。
             error: 页码、收藏夹 ID 或排序参数无效时的错误信息（可选）。
         """
-        order_value = ORDER_BY_MAP.get(order_by.lower())
+        order_value = FAVORITE_ORDER_BY_MAP.get(order_by.lower())
         error_msg = None
         if page < 1:
             error_msg = "page must be greater than or equal to 1"
         elif not folder_id.isascii() or not folder_id.isdecimal():
             error_msg = "folder_id must be a non-negative numeric ID"
         elif order_value is None:
-            error_msg = f"Invalid order_by: {order_by}. Valid options: {', '.join(ORDER_BY_MAP)}"
+            error_msg = f"Invalid order_by: {order_by}. Valid options: {', '.join(FAVORITE_ORDER_BY_MAP)}"
 
         if error_msg is not None:
             self.logger.error(error_msg)
@@ -974,114 +978,101 @@ class JmcomicService:
         self.logger.info(f"Favorite albums fetched: folder_id={folder_id}, page={page}, count={len(result['albums'])}")
         return result
 
-    def add_favorite_album(self, album_id: str, folder_id: str = "0") -> dict[str, Any]:
+    def add_favorite_album(self, album_id: str) -> dict[str, Any]:
         """
         将本子加入当前登录账户的收藏夹，需要有效的登录会话或 Cookie。
-        API 客户端先查询本子当前的收藏状态，已收藏时直接返回成功，否则发送添加请求。
-        同一进程内的 API 收藏添加串行执行；其他进程或外部客户端的操作仍可能影响结果。
+        本子已在收藏中时返回 error，且不会改变收藏状态。
 
         参数:
             album_id: 本子 ID，也支持 JM 前缀或本子链接。
-            folder_id: 收藏夹 ID，"0" 使用上游默认行为；指定收藏夹仅支持 HTML 客户端。
-                API 客户端传入非 "0" 值时会在请求前返回错误。
-
-        返回:
-            status: "success" 或 "error"；API 查询到已收藏时也返回 success。
-            album_id: 本子 ID，成功解析后为纯数字字符串。
-            folder_id: 请求的收藏夹 ID；API 的 "0" 不代表已验证的实际归属。
-            message: 已收藏提示、上游结果消息或错误说明。
-                HTML 客户端的重复收藏错误保留上游行为。
-        """
-        parsed_album_id = album_id
-        try:
-            parsed_album_id = JmcomicText.parse_to_jm_id(album_id)
-            if not parsed_album_id.isascii() or not parsed_album_id.isdecimal() or int(parsed_album_id) < 1:
-                raise ValueError("album_id must resolve to a positive numeric ID")
-            if not folder_id.isascii() or not folder_id.isdecimal():
-                raise ValueError("folder_id must be a non-negative numeric ID")
-
-            client = self.get_client()
-            if client.is_given_type(JmApiClient):
-                if folder_id != "0":
-                    raise ValueError(
-                        "The API client does not support folder_id for adding favorites; use the HTML client."
-                    )
-                with _FAVORITE_LOCK:
-                    album_response = client.req_api(client.API_ALBUM, params={"id": parsed_album_id})
-                    if album_response.model_data["is_favorite"]:
-                        self.logger.info(f"Album already in favorites: album_id={parsed_album_id}")
-                        return {
-                            "status": "success",
-                            "album_id": parsed_album_id,
-                            "folder_id": folder_id,
-                            "message": "已收藏，无需重复添加",
-                        }
-                    response = client.req_api("/favorite", get=False, data={"aid": parsed_album_id})
-                    client.require_resp_status_ok(response)
-            else:
-                response = client.add_favorite_album(parsed_album_id, folder_id=folder_id)
-            response_data = response.model_data if isinstance(response, JmApiResp) else response.json()
-            message = str(response_data.get("msg") or "Favorite request succeeded.")
-            self.logger.info(f"Favorite request succeeded: album_id={parsed_album_id}, folder_id={folder_id}")
-            return {"status": "success", "album_id": parsed_album_id, "folder_id": folder_id, "message": message}
-        except Exception as e:
-            self.logger.error(f"Favorite request failed: album_id={parsed_album_id}, folder_id={folder_id}: {e}")
-            return {"status": "error", "album_id": parsed_album_id, "folder_id": folder_id, "message": str(e)}
-
-    def remove_favorite_album(self, album_id: str, folder_id: str = "0") -> dict[str, Any]:
-        """
-        从当前登录账户的收藏夹移除本子，需要有效的登录会话或 Cookie。
-        上游收藏接口是 toggle：API 客户端会先查询收藏状态，仅在已收藏时发送切换请求；
-        网页客户端直接调用上游 toggle 接口。
-
-        参数:
-            album_id: 本子 ID，也支持 JM 前缀或本子链接。
-            folder_id: 收藏夹 ID，"0" 使用上游默认行为；指定收藏夹仅支持 HTML 客户端。
-                API 客户端传入非 "0" 值时会在请求前返回错误。
 
         返回:
             status: "success" 或 "error"。
             album_id: 本子 ID，成功解析后为纯数字字符串。
-            folder_id: 请求的收藏夹 ID。
-            message: 已移除、未收藏提示、上游结果消息或错误说明。
+            title: 本子标题，未能读取时为空字符串。
+            message: 上游结果消息或错误说明。
         """
         parsed_album_id = album_id
+        title = ""
         try:
             parsed_album_id = JmcomicText.parse_to_jm_id(album_id)
             if not parsed_album_id.isascii() or not parsed_album_id.isdecimal() or int(parsed_album_id) < 1:
                 raise ValueError("album_id must resolve to a positive numeric ID")
-            if not folder_id.isascii() or not folder_id.isdecimal():
-                raise ValueError("folder_id must be a non-negative numeric ID")
 
             client = self.get_client()
             if client.is_given_type(JmApiClient):
-                if folder_id != "0":
-                    raise ValueError(
-                        "The API client does not support folder_id for removing favorites; use the HTML client."
-                    )
-                with _FAVORITE_LOCK:
-                    album_response = client.req_api(client.API_ALBUM, params={"id": parsed_album_id})
-                    if not album_response.model_data["is_favorite"]:
-                        self.logger.info(f"Album not in favorites: album_id={parsed_album_id}")
-                        return {
-                            "status": "success",
-                            "album_id": parsed_album_id,
-                            "folder_id": folder_id,
-                            "message": "未收藏，无需移除",
-                        }
-                    response = client.req_api("/favorite", get=False, data={"aid": parsed_album_id})
-                    client.require_resp_status_ok(response)
+                state = client.req_api(client.API_ALBUM, params={"id": parsed_album_id}).model_data
+                title, is_favorite = str(state["name"]), bool(state["is_favorite"])
             else:
-                with _FAVORITE_LOCK:
-                    response = client.add_favorite_album(parsed_album_id, folder_id=folder_id)
+                # HTML 详情不带收藏状态，是否已收藏由上游接口自己拒绝
+                title, is_favorite = str(client.get_album_detail(parsed_album_id).name), None
+
+            if is_favorite is True:
+                self.logger.info(f"Favorite add skipped: album_id={parsed_album_id} is already in favorites")
+                return {
+                    "status": "error",
+                    "album_id": parsed_album_id,
+                    "title": title,
+                    "message": "Album is already in favorites, so nothing was added.",
+                }
+
+            response = client.add_favorite_album(parsed_album_id)
 
             response_data = response.model_data if isinstance(response, JmApiResp) else response.json()
-            message = str(response_data.get("msg") or "Favorite removal request succeeded.")
-            self.logger.info(f"Favorite removal request succeeded: album_id={parsed_album_id}, folder_id={folder_id}")
-            return {"status": "success", "album_id": parsed_album_id, "folder_id": folder_id, "message": message}
+            message = str(response_data.get("msg") or "Album added to favorites.")
+            self.logger.info(f"Favorite add succeeded: album_id={parsed_album_id}")
+            return {"status": "success", "album_id": parsed_album_id, "title": title, "message": message}
         except Exception as e:
-            self.logger.error(f"Favorite removal failed: album_id={parsed_album_id}, folder_id={folder_id}: {e}")
-            return {"status": "error", "album_id": parsed_album_id, "folder_id": folder_id, "message": str(e)}
+            self.logger.error(f"Favorite add failed: album_id={parsed_album_id}: {e}")
+            return {"status": "error", "album_id": parsed_album_id, "title": title, "message": str(e)}
+
+    def delete_favorite_album(self, album_id: str) -> dict[str, Any]:
+        """
+        取消当前登录账户对本子的收藏，需要有效的登录会话或 Cookie。
+        本子未在收藏中时返回 error，且不会改变收藏状态。
+
+        参数:
+            album_id: 本子 ID，也支持 JM 前缀或本子链接。
+
+        返回:
+            status: "success" 或 "error"。
+            album_id: 本子 ID，成功解析后为纯数字字符串。
+            title: 本子标题，未能读取时为空字符串。
+            message: 上游结果消息或错误说明。
+        """
+        parsed_album_id = album_id
+        title = ""
+        try:
+            parsed_album_id = JmcomicText.parse_to_jm_id(album_id)
+            if not parsed_album_id.isascii() or not parsed_album_id.isdecimal() or int(parsed_album_id) < 1:
+                raise ValueError("album_id must resolve to a positive numeric ID")
+
+            client = self.get_client()
+            if client.is_given_type(JmApiClient):
+                state = client.req_api(client.API_ALBUM, params={"id": parsed_album_id}).model_data
+                title, is_favorite = str(state["name"]), bool(state["is_favorite"])
+            else:
+                # HTML 详情不带收藏状态，是否未收藏由上游接口自己拒绝
+                title, is_favorite = str(client.get_album_detail(parsed_album_id).name), None
+
+            if is_favorite is False:
+                self.logger.info(f"Favorite delete skipped: album_id={parsed_album_id} is not in favorites")
+                return {
+                    "status": "error",
+                    "album_id": parsed_album_id,
+                    "title": title,
+                    "message": "Album is not in favorites, so nothing was removed.",
+                }
+
+            response = client.delete_favorite_album(parsed_album_id)
+
+            response_data = response.model_data if isinstance(response, JmApiResp) else response.json()
+            message = str(response_data.get("msg") or "Album removed from favorites.")
+            self.logger.info(f"Favorite delete succeeded: album_id={parsed_album_id}")
+            return {"status": "success", "album_id": parsed_album_id, "title": title, "message": message}
+        except Exception as e:
+            self.logger.error(f"Favorite delete failed: album_id={parsed_album_id}: {e}")
+            return {"status": "error", "album_id": parsed_album_id, "title": title, "message": str(e)}
 
     def get_album_detail(self, album_id: str) -> dict[str, Any]:
         """

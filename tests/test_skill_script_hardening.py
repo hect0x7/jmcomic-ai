@@ -15,6 +15,7 @@ from jmcomic_ai.core import JmcomicService
 from jmcomic_ai.skills.jmcomic.scripts import (
     add_favorite_album,
     batch_download,
+    delete_favorite_album,
     doctor,
     download_covers,
     download_photo,
@@ -55,27 +56,50 @@ class TestFavoriteScripts(unittest.TestCase):
                 add_favorite_album,
                 "add_favorite_album",
                 ["--id", "123"],
-                {"status": "success", "album_id": "123", "folder_id": "0", "message": "漫畫添加到您最喜愛的清單！"},
+                {
+                    "status": "success",
+                    "album_id": "123",
+                    "title": "Example album",
+                    "message": "漫畫添加到您最喜愛的清單！",
+                },
                 0,
             ),
             (
                 add_favorite_album,
                 "add_favorite_album",
                 ["--id", "123"],
-                {"status": "success", "album_id": "123", "folder_id": "0", "message": "已收藏，无需重复添加"},
+                {
+                    "status": "error",
+                    "album_id": "123",
+                    "title": "Example album",
+                    "message": "Album is already in favorites, so nothing was added.",
+                },
+                1,
+            ),
+            (
+                delete_favorite_album,
+                "delete_favorite_album",
+                ["--id", "123"],
+                {"status": "success", "album_id": "123", "title": "Example album", "message": "Favorite removed"},
                 0,
             ),
             (
-                add_favorite_album,
-                "add_favorite_album",
+                delete_favorite_album,
+                "delete_favorite_album",
                 ["--id", "123"],
-                {"status": "error", "album_id": "123", "folder_id": "0", "message": "'status'"},
+                {
+                    "status": "error",
+                    "album_id": "123",
+                    "title": "Example album",
+                    "message": "Album is not in favorites, so nothing was removed.",
+                },
                 1,
             ),
         )
+        scripts_without_export = (add_favorite_album, delete_favorite_album)
         with tempfile.TemporaryDirectory() as temp_dir:
             for module, method, argv, result, expected_exit in cases:
-                for export in (False,) if module is add_favorite_album else (False, True):
+                for export in (False,) if module in scripts_without_export else (False, True):
                     with self.subTest(script=method, export=export, expected_exit=expected_exit):
                         output_path = Path(temp_dir) / method / "nested" / "result.json"
                         args = ["script", *argv]

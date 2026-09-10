@@ -49,9 +49,17 @@ def _start_favorite_stdio_server(log_path: str):
         page_number=2,
         iter_folder_id_name=lambda: iter([("4", "Example folder")]),
     )
-    client.req_api.return_value = Mock(
-        model_data={"is_favorite": False},
+    favorite_state = {"123": (False, "Example album"), "456": (True, "Example album 2")}
+    client.req_api.side_effect = lambda *args, params=None, **kwargs: Mock(
+        model_data={"is_favorite": favorite_state[params["id"]][0], "name": favorite_state[params["id"]][1]}
+    )
+    client.add_favorite_album.return_value = Mock(
+        model_data={"status": "ok", "msg": "Favorite added"},
         json=Mock(return_value={"msg": "Favorite added"}),
+    )
+    client.delete_favorite_album.return_value = Mock(
+        model_data={"status": "ok", "msg": "Favorite removed"},
+        json=Mock(return_value={"msg": "Favorite removed"}),
     )
     service.client = client
     run_server("stdio", service)
@@ -91,12 +99,41 @@ class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
                         (
                             "add_favorite_album",
                             {"album_id": "JM123"},
-                            {"status": "success", "album_id": "123", "message": "Favorite added"},
+                            {
+                                "status": "success",
+                                "album_id": "123",
+                                "title": "Example album",
+                                "message": "Favorite added",
+                            },
                         ),
                         (
-                            "remove_favorite_album",
-                            {"album_id": "JM123"},
-                            {"status": "success", "album_id": "123", "message": "未收藏，无需移除"},
+                            "add_favorite_album",
+                            {"album_id": "456"},
+                            {
+                                "status": "error",
+                                "album_id": "456",
+                                "title": "Example album 2",
+                                "message": "Album is already in favorites, so nothing was added.",
+                            },
+                        ),
+                        (
+                            "delete_favorite_album",
+                            {"album_id": "JM456"},
+                            {
+                                "status": "success",
+                                "album_id": "456",
+                                "title": "Example album 2",
+                                "message": "Favorite removed",
+                            },
+                        ),
+                        (
+                            "delete_favorite_album",
+                            {"album_id": "0"},
+                            {
+                                "status": "error",
+                                "title": "",
+                                "message": "album_id must resolve to a positive numeric ID",
+                            },
                         ),
                         (
                             "browse_favorite_albums",
@@ -104,9 +141,21 @@ class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
                             {"albums": [], "error": "page must be greater than or equal to 1"},
                         ),
                         (
+                            "browse_favorite_albums",
+                            {"order_by": "likes"},
+                            {
+                                "albums": [],
+                                "error": "Invalid order_by: likes. Valid options: favorite_time, update_time",
+                            },
+                        ),
+                        (
                             "add_favorite_album",
                             {"album_id": "0"},
-                            {"status": "error", "message": "album_id must resolve to a positive numeric ID"},
+                            {
+                                "status": "error",
+                                "title": "",
+                                "message": "album_id must resolve to a positive numeric ID",
+                            },
                         ),
                     ]
                     for name, arguments, expected in cases:
@@ -197,7 +246,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "get_favorite_folders",
                 "browse_favorite_albums",
                 "add_favorite_album",
-                "remove_favorite_album",
+                "delete_favorite_album",
                 "download_album",
                 "download_photo",
                 "download_cover",

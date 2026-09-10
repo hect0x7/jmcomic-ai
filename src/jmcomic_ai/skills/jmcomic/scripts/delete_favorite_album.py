@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove one album from the current account's favorites."""
+"""Delete one album from the current account's favorites."""
 
 import argparse
 import json
@@ -17,9 +17,8 @@ except ImportError as exc:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Remove a JMComic album from favorites")
+    parser = argparse.ArgumentParser(description="Delete a JMComic album from favorites")
     parser.add_argument("--id", required=True, help="Album ID, JM-prefixed ID, or album URL")
-    parser.add_argument("--folder-id", default="0", help="Favorite folder ID (non-default folders require HTML client)")
     parser.add_argument("--option", help="Path to option.yml file")
     return parser.parse_args()
 
@@ -29,9 +28,9 @@ def main():
 
     try:
         service = JmcomicService(option_path=args.option)
-        result = service.remove_favorite_album(args.id, folder_id=args.folder_id)
+        result = service.delete_favorite_album(args.id)
     except Exception as e:
-        print(f"Error: failed to remove favorite album: {e}", file=sys.stderr)
+        print(f"Error: failed to delete favorite album: {e}", file=sys.stderr)
         sys.exit(1)
 
     print(json.dumps(result, indent=2, ensure_ascii=False))

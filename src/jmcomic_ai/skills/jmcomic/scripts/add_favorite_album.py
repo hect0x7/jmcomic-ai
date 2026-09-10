@@ -19,7 +19,6 @@ except ImportError as exc:
 def parse_args():
     parser = argparse.ArgumentParser(description="Add a JMComic album to favorites")
     parser.add_argument("--id", required=True, help="Album ID, JM-prefixed ID, or album URL")
-    parser.add_argument("--folder-id", default="0", help="Favorite folder ID (non-default folders require HTML client)")
     parser.add_argument("--option", help="Path to option.yml file")
     return parser.parse_args()
 
@@ -29,7 +28,7 @@ def main():
 
     try:
         service = JmcomicService(option_path=args.option)
-        result = service.add_favorite_album(args.id, folder_id=args.folder_id)
+        result = service.add_favorite_album(args.id)
     except Exception as e:
         print(f"Error: failed to add favorite album: {e}", file=sys.stderr)
         sys.exit(1)

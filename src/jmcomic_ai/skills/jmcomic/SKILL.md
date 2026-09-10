@@ -1,6 +1,6 @@
 ---
 name: jmcomic
-description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse, add, and remove favorites, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
+description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse, add, and delete favorites, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
 ---
 
 # JMComic Skill
@@ -13,7 +13,7 @@ Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
 - Read album-specific or site-wide comments and nested replies, including spoiler flags
-- List favorite folders, browse saved albums, add an album to favorites, or remove an album from favorites
+- List favorite folders, browse saved albums, add an album to favorites, or delete an album from favorites
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
@@ -104,7 +104,6 @@ Use `get_forum_comments(page: int = 1)` for the latest site-wide comments. It re
 
 ### Favorites
 
-The package requires `jmcomic>=2.7.5`, including its HTML favorite-total parsing fix.
 All favorite tools require an authenticated client. Call `login` in the same MCP session or configure
 valid cookies. For HTML queries authenticated only by Cookie, pass `username`; after `login`, it can
 be omitted. The API client ignores `username` and always queries the current account. Separate script
@@ -119,7 +118,7 @@ processes need authentication in their configuration; they do not inherit an MCP
 The directory can be empty. Use `folder_id="0"` to browse all favorites even if this ID is absent
 from the returned directory.
 
-**`browse_favorite_albums(folder_id: str = "0", page: int = 1, order_by: str = "latest", username: str = "")`** returns:
+**`browse_favorite_albums(folder_id: str = "0", page: int = 1, order_by: str = "favorite_time", username: str = "")`** returns:
 
 ```python
 {
@@ -132,58 +131,33 @@ from the returned directory.
 ```
 
 Pagination starts at 1; `folder_id="0"` means all favorites. An empty result retains pagination and
-folder metadata. `order_by` uses the same mapping as `browse_albums`: `latest`, `likes`, `views`,
-`pictures`, `score`, `comments`. Actual sorting depends on the upstream client; the service does not
-sort a page locally. Invalid arguments return an empty list with `error`; authentication and request
-failures propagate as tool errors, not empty collections.
+folder metadata. `order_by` accepts `favorite_time` (default) and `update_time`; the favorites list has
+its own upstream sort vocabulary, which differs from `browse_albums`. The service does not sort a page
+locally. Invalid arguments return an empty list with `error`; authentication and request failures
+propagate as tool errors, not empty collections.
 
-**`add_favorite_album(album_id: str, folder_id: str = "0")`** returns:
+**`add_favorite_album(album_id: str)`** returns:
 
 ```python
 {
     "status": "success" | "error",
     "album_id": str,
-    "folder_id": str,
+    "title": str,   # Album title
     "message": str
 }
 ```
 
 `album_id` accepts a numeric ID, a JM-prefixed ID, or an album URL and is normalized when parsing
-succeeds. `folder_id="0"` uses upstream defaults. Only HTML clients support adding to a specific
-folder; API clients reject non-`"0"` folder IDs before sending the request. The returned `folder_id`
-echoes the request and does not verify actual placement for the API default.
+succeeds. The album is saved to the account's default favorites placement.
+Adding an album that is already saved returns `status="error"` and leaves the saved state unchanged.
 
-For API clients, the service fetches `/album` directly to read the current `is_favorite` flag.
-If the album is already saved, it returns `success` with `message="已收藏，无需重复添加"` without sending
-an add request. Otherwise it sends the request and preserves the upstream business status and message.
-A failed lookup returns an error.
-HTML clients retain upstream behavior, including errors for duplicate additions. API check-and-add
-operations are serialized across service instances in the same process. Other processes or external
-clients can still change the state between the two requests.
-Use the browsing tool to inspect the result. These tools do not move albums or create folders.
+**`delete_favorite_album(album_id: str)`** returns the same fields and takes the same `album_id` forms.
+Deleting an album that is not saved returns `status="error"` and leaves the saved state unchanged.
 
-After adding favorites, list each successfully added album in the final response as `title (ID)`.
-Reuse titles from earlier search, browse, or detail results; fetch missing titles with
-`get_album_detail` or `python scripts/album_info.py --id ID` (`--ids` for multiple albums).
-Label albums reported as already saved as `已收藏`; report failed additions with their error messages.
-
-**`remove_favorite_album(album_id: str, folder_id: str = "0")`** returns the same structured fields as
-`add_favorite_album`:
-
-```python
-{
-    "status": "success" | "error",
-    "album_id": str,
-    "folder_id": str,
-    "message": str
-}
-```
-
-The upstream endpoint is a toggle. For API clients, the service checks `is_favorite` first and returns
-`status="success"` with `message="未收藏，无需移除"` when the album is already absent; otherwise it
-sends one toggle request. API clients reject non-default folder IDs. HTML clients call the upstream
-toggle endpoint directly, so only use this operation when the album is currently favorited.
-`status="error"` reports validation, authentication, or request failures.
+Both tools behave identically whichever client implementation the configuration selects, and both return
+the album `title`. Name every affected album as `title (ID)`; when `title` is empty or absent, reuse an
+earlier search, browse, or detail result, or fetch the name with `get_album_detail(album_id)` or
+`python scripts/album_info.py --id ID`.
 
 ## Core Capabilities
 
@@ -307,7 +281,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `favorite_folders.py` | List favorite folders as JSON; supports `--username`, `--output`, and `--option`. |
 | `favorite_albums.py` | Browse one page of favorites as JSON; supports folder, page, sort, and username filters. |
 | `add_favorite_album.py` | Add one favorite and print its structured result as JSON; failures exit non-zero. |
-| `remove_favorite_album.py` | Remove one favorite and print its structured result as JSON; failures exit non-zero. |
+| `delete_favorite_album.py` | Delete one favorite and print its structured result as JSON; failures exit non-zero. |
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
 | `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
@@ -326,8 +300,8 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `forum_comments.py` | `get_forum_comments` | High | `--page` maps to `page`, and each returned comment preserves its source `album_id`. |
 | `favorite_folders.py` | `get_favorite_folders` | High | `--username` maps to `username`; JSON preserves the MCP result shape. |
 | `favorite_albums.py` | `browse_favorite_albums` | High | `--folder-id`, `--page`, `--order-by`, `--username` map to the corresponding tool arguments. |
-| `add_favorite_album.py` | `add_favorite_album` | High | `--id` maps to `album_id`, `--folder-id` to `folder_id`; an error result exits non-zero. |
-| `remove_favorite_album.py` | `remove_favorite_album` | High | `--id` maps to `album_id`, `--folder-id` to `folder_id`; an error result exits non-zero. |
+| `add_favorite_album.py` | `add_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
+| `delete_favorite_album.py` | `delete_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
 | `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |

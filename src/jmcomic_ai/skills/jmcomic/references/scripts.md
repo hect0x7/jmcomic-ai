@@ -233,53 +233,43 @@ The folder directory may be empty, and the special all-favorites ID `"0"` may be
 python scripts/favorite_albums.py
 
 # Browse one folder with a Cookie-authenticated HTML client
-python scripts/favorite_albums.py --folder-id 123 --page 2 --order-by latest --username YOUR_USERNAME --output favorites.json
+python scripts/favorite_albums.py --folder-id 123 --page 2 --order-by favorite_time --username YOUR_USERNAME --output favorites.json
 ```
 
 | Parameter | Tool argument | Default |
 | :--- | :--- | :--- |
 | `--folder-id` | `folder_id` | `"0"` (all favorites) |
 | `--page` | `page` | `1` |
-| `--order-by` | `order_by` | `latest` |
+| `--order-by` | `order_by` | `favorite_time` |
 | `--username` | `username` | Empty; required for HTML Cookie-only queries |
 
 Returns `albums`, `total_count`, `page`, and `folder_id`, preserving the MCP response. Sorting accepts
-`latest`, `likes`, `views`, `pictures`, `score`, and `comments`, using the existing browsing mapping;
-actual sorting depends on upstream support. Invalid page, folder, or sort parameters produce an
+`favorite_time` and `update_time`. Invalid page, folder, or sort parameters produce an
 `error` field and exit code 1. An empty collection is a successful result.
 
 ### `add_favorite_album.py` - Add a Favorite
 
 ```bash
 python scripts/add_favorite_album.py --id 123456
-python scripts/add_favorite_album.py --id JM123456 --folder-id 123 --option /path/to/html-option.yml
+python scripts/add_favorite_album.py --id JM123456 --option /path/to/option.yml
 ```
 
-`--id` maps to `album_id` and accepts a numeric ID, JM-prefixed ID, or album URL. `--folder-id` maps
-to `folder_id` and defaults to `"0"` (upstream default behavior). Non-default folder IDs require an
-HTML client; API clients reject them before sending a request.
+`--id` maps to `album_id` and accepts a numeric ID, JM-prefixed ID, or album URL. The script saves the
+album to the account's default favorites placement and prints `status`, `album_id`, `title`, and
+`message` as JSON to stdout. An album that is already saved returns `status="error"` and stays unchanged;
+`status="error"` exits with code 1.
 
-Prints `status`, `album_id`, `folder_id`, and `message` as JSON to stdout. For API clients, the service
-checks `is_favorite` in a fresh album detail response before adding. An existing album returns
-`status="success"` with `message="已收藏，无需重复添加"` and skips the add request. Lookup failures return an error.
-API check-and-add operations are serialized within one process; separate script processes and external
-clients can still change the state concurrently.
-HTML clients retain upstream behavior, including errors for duplicate additions. `status="error"`
-exits with code 1. The returned folder ID echoes the request; it does not verify API default placement.
-Use `favorite_albums.py` to inspect the saved collection.
-
-### `remove_favorite_album.py` - Remove a Favorite
+### `delete_favorite_album.py` - Delete a Favorite
 
 ```bash
-python scripts/remove_favorite_album.py --id 123456
-python scripts/remove_favorite_album.py --id JM123456 --folder-id 123 --option /path/to/html-option.yml
+python scripts/delete_favorite_album.py --id 123456
+python scripts/delete_favorite_album.py --id JM123456 --option /path/to/option.yml
 ```
 
-`--id` maps to `album_id`; `--folder-id` maps to `folder_id` and defaults to `"0"`. The upstream
-favorite endpoint is a toggle. API clients check `is_favorite` first and skip the request when the
-album is not saved; HTML clients call the toggle endpoint directly and should only be used for a
-currently favorited album. The script prints the structured result as JSON and exits with code 1 on
-`status="error"`.
+`--id` maps to `album_id` and accepts a numeric ID, JM-prefixed ID, or album URL. The script removes
+the album from the account's favorites and prints `status`, `album_id`, `title`, and `message` as JSON
+to stdout. An album that is not saved returns `status="error"` and stays unchanged; `status="error"` exits
+with code 1.
 
 ## 🖼️ `download_covers.py` - Batch Cover Downloads
 

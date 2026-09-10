@@ -157,7 +157,7 @@ skills/jmcomic/
     ├── favorite_folders.py         # 📁 获取收藏夹目录
     ├── favorite_albums.py          # ⭐ 分页浏览收藏
     ├── add_favorite_album.py       # ➕ 添加本子到收藏
-    ├── remove_favorite_album.py    # ➖ 从收藏移除本子
+    ├── delete_favorite_album.py    # ➖ 从收藏移除本子
     ├── download_covers.py          # 🖼️ 批量下载封面
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
@@ -195,8 +195,8 @@ skills/jmcomic/
 |:---|:---|:---|
 | `get_favorite_folders` | 获取收藏夹目录（`id`、`name`） | `username` |
 | `browse_favorite_albums` | 分页浏览收藏，返回本子摘要及总数 | `folder_id`, `page`, `order_by`, `username` |
-| `add_favorite_album` | 添加收藏，返回操作状态及结果消息 | `album_id`, `folder_id` |
-| `remove_favorite_album` | 移除收藏，返回操作状态及结果消息 | `album_id`, `folder_id` |
+| `add_favorite_album` | 添加收藏，返回操作状态及结果消息 | `album_id` |
+| `delete_favorite_album` | 删除收藏，返回操作状态及结果消息 | `album_id` |
 
 ### 下载
 

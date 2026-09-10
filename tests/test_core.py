@@ -14,9 +14,7 @@ import os
 import tempfile
 import time
 import unittest
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Barrier, BrokenBarrierError, Lock
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -26,6 +24,7 @@ from jmcomic import (
     JmApiClient,
     JmApiResp,
     JmcomicClient,
+    JmHtmlClient,
     JmModuleConfig,
     JmOption,
     jm_log,
@@ -33,6 +32,7 @@ from jmcomic import (
 )
 
 from jmcomic_ai.core import (
+    FAVORITE_ORDER_BY_MAP,
     GLOBAL_LOG_HANDLER_NAME,
     ORDER_BY_MAP,
     TIME_RANGE_MAP,
@@ -57,6 +57,11 @@ class TestSharedMappings(unittest.TestCase):
         expected = {"all", "day", "today", "week", "month"}
         self.assertEqual(expected, set(TIME_RANGE_MAP.keys()))
         self.assertEqual(TIME_RANGE_MAP["day"], TIME_RANGE_MAP["today"])
+
+    def test_favorite_order_by_friendly_keys(self):
+        """The favorites list has its own sort vocabulary, separate from search and browse."""
+        self.assertEqual({"favorite_time", "update_time"}, set(FAVORITE_ORDER_BY_MAP.keys()))
+        self.assertFalse(set(FAVORITE_ORDER_BY_MAP) & set(ORDER_BY_MAP))
 
 
 class TestLoggingConfiguration(unittest.TestCase):
@@ -281,6 +286,7 @@ class TestFavorites(unittest.TestCase):
             status_code=200,
             content=b"response",
             text=json.dumps({"code": 200, "data": json.dumps(payload)}),
+            json=lambda: payload,
         )
 
     def setUp(self):
@@ -296,10 +302,20 @@ class TestFavorites(unittest.TestCase):
         }
 
         self.client.get = Mock(return_value=self.response(favorite_page))
-        self.client.post = Mock(return_value=self.response({"status": "ok", "msg": "漫畫添加到您最喜愛的清單！"}))
+        self.client.add_favorite_album = Mock(
+            return_value=self.response({"status": "ok", "msg": "漫畫添加到您最喜愛的清單！"})
+        )
+        self.client.delete_favorite_album = Mock(
+            return_value=self.response({"status": "ok", "msg": "Favorite removed"})
+        )
         decoded_data = patch.object(JmApiResp, "decoded_data", property(lambda response: response.encoded_data))
         decoded_data.start()
         self.addCleanup(decoded_data.stop)
+
+    def set_favorite(self, is_favorite: bool):
+        """模拟 API 客户端查询到的本子收藏状态。"""
+        state = {"is_favorite": is_favorite, "name": "Example album"}
+        self.client.req_api = Mock(return_value=SimpleNamespace(model_data=state))
 
     def test_favorite_directory_and_browse_responses(self):
         self.assertEqual({"folders": [{"id": "4", "name": "Example folder"}]}, self.service.get_favorite_folders())
@@ -312,97 +328,147 @@ class TestFavorites(unittest.TestCase):
         self.assertTrue(album["cover_url"])
 
     def test_add_favorite_success_response(self):
-        self.client.get.return_value = self.response({"id": 456, "is_favorite": False})
+        self.set_favorite(False)
 
         result = self.service.add_favorite_album("456")
 
         self.assertEqual(
-            {"status": "success", "album_id": "456", "folder_id": "0", "message": "漫畫添加到您最喜愛的清單！"},
+            {"status": "success", "album_id": "456", "title": "Example album", "message": "漫畫添加到您最喜愛的清單！"},
             result,
         )
+        self.client.add_favorite_album.assert_called_once_with("456")
 
-    def test_add_existing_favorite_response(self):
-        self.client.get.return_value = self.response({"id": 123, "is_favorite": True})
-        self.client.post.return_value = self.response({"status": "ok", "msg": "已移除收藏"})
+    def test_add_favorite_already_saved_returns_error_without_request(self):
+        self.set_favorite(True)
+
+        result = self.service.add_favorite_album("456")
+
+        self.assertEqual(
+            {
+                "status": "error",
+                "album_id": "456",
+                "title": "Example album",
+                "message": "Album is already in favorites, so nothing was added.",
+            },
+            result,
+        )
+        self.client.add_favorite_album.assert_not_called()
+
+    def test_add_favorite_upstream_error_returns_error(self):
+        self.set_favorite(False)
+        self.client.add_favorite_album.side_effect = RuntimeError("Request failed: not logged in")
 
         result = self.service.add_favorite_album("123")
 
         self.assertEqual(
-            {"status": "success", "album_id": "123", "folder_id": "0", "message": "已收藏，无需重复添加"},
+            {
+                "status": "error",
+                "album_id": "123",
+                "title": "Example album",
+                "message": "Request failed: not logged in",
+            },
             result,
         )
 
-    def test_add_favorite_list_response_returns_error(self):
-        self.client.post.return_value = self.client.get.return_value
-        self.client.get.return_value = self.response({"id": 456, "is_favorite": False})
+    def test_html_client_returns_the_same_add_result_shape(self):
+        html_client = object.__new__(JmHtmlClient)
+        html_client.get_album_detail = Mock(return_value=SimpleNamespace(name="Example album"))
+        html_client.add_favorite_album = Mock(return_value=self.response({"status": 1, "msg": "已收藏"}))
+        self.service.client = html_client
 
         result = self.service.add_favorite_album("456")
 
-        self.assertEqual({"status": "error", "album_id": "456", "folder_id": "0", "message": "'status'"}, result)
+        self.assertEqual(
+            {"status": "success", "album_id": "456", "title": "Example album", "message": "已收藏"}, result
+        )
+        html_client.add_favorite_album.assert_called_once_with("456")
 
-    def test_remove_favorite_success_response(self):
-        self.client.get.return_value = self.response({"id": 456, "is_favorite": True})
-        self.client.post.return_value = self.response({"status": "ok", "msg": "Favorite removed"})
+    def test_html_client_returns_the_same_delete_result_shape(self):
+        html_client = object.__new__(JmHtmlClient)
+        html_client.get_album_detail = Mock(return_value=SimpleNamespace(name="Example album"))
+        html_client.delete_favorite_album = Mock(return_value=self.response({"status": 1, "msg": "已移除收藏"}))
+        self.service.client = html_client
 
-        result = self.service.remove_favorite_album("JM456")
+        result = self.service.delete_favorite_album("456")
 
         self.assertEqual(
-            {"status": "success", "album_id": "456", "folder_id": "0", "message": "Favorite removed"},
+            {"status": "success", "album_id": "456", "title": "Example album", "message": "已移除收藏"}, result
+        )
+        html_client.delete_favorite_album.assert_called_once_with("456")
+
+    def test_html_client_leaves_the_state_check_to_upstream(self):
+        html_client = object.__new__(JmHtmlClient)
+        html_client.get_album_detail = Mock(return_value=SimpleNamespace(name="Example album"))
+        html_client.delete_favorite_album = Mock(side_effect=ValueError("此圖片不在您最喜愛的清單！"))
+        self.service.client = html_client
+
+        result = self.service.delete_favorite_album("456")
+
+        self.assertEqual(
+            {
+                "status": "error",
+                "album_id": "456",
+                "title": "Example album",
+                "message": "此圖片不在您最喜愛的清單！",
+            },
             result,
         )
 
-    def test_remove_missing_favorite_response(self):
-        self.client.get.return_value = self.response({"id": 456, "is_favorite": False})
+    def test_delete_favorite_success_response(self):
+        self.set_favorite(True)
 
-        result = self.service.remove_favorite_album("456")
+        result = self.service.delete_favorite_album("JM456")
 
         self.assertEqual(
-            {"status": "success", "album_id": "456", "folder_id": "0", "message": "未收藏，无需移除"},
+            {"status": "success", "album_id": "456", "title": "Example album", "message": "Favorite removed"}, result
+        )
+        self.client.delete_favorite_album.assert_called_once_with("456")
+
+    def test_delete_favorite_not_saved_returns_error_without_request(self):
+        self.set_favorite(False)
+
+        result = self.service.delete_favorite_album("456")
+
+        self.assertEqual(
+            {
+                "status": "error",
+                "album_id": "456",
+                "title": "Example album",
+                "message": "Album is not in favorites, so nothing was removed.",
+            },
             result,
         )
-        self.assertEqual(1, self.client.get.call_count)
-        self.client.post.assert_not_called()
+        self.client.delete_favorite_album.assert_not_called()
 
-    def test_concurrent_adds_keep_album_favorited(self):
-        """Concurrent callers sharing an account only toggle the favorite once."""
-        reads = Barrier(2)
-        state_lock = Lock()
-        favorite = False
+    def test_delete_favorite_upstream_error_returns_error(self):
+        self.set_favorite(True)
+        self.client.delete_favorite_album.side_effect = RuntimeError("Request failed: not logged in")
 
-        def read_favorite(*args, **kwargs):
-            with state_lock:
-                is_favorite = favorite
-            try:
-                reads.wait(timeout=0.5)
-            except BrokenBarrierError:
-                pass
-            return self.response({"id": 123, "is_favorite": is_favorite})
+        result = self.service.delete_favorite_album("456")
 
-        def toggle_favorite(*args, **kwargs):
-            nonlocal favorite
-            with state_lock:
-                favorite = not favorite
-            return self.response({"status": "ok", "msg": "Favorite toggled"})
+        self.assertEqual(
+            {
+                "status": "error",
+                "album_id": "456",
+                "title": "Example album",
+                "message": "Request failed: not logged in",
+            },
+            result,
+        )
 
-        self.client.get.side_effect = read_favorite
-        self.client.post.side_effect = toggle_favorite
-        other_service = object.__new__(JmcomicService)
-        other_service.logger = Mock()
-        other_service.client = object.__new__(JmApiClient)
-        other_service.client.get = self.client.get
-        other_service.client.post = self.client.post
+    def test_delete_favorite_rejects_invalid_album_id(self):
+        result = self.service.delete_favorite_album("0")
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = [
-                executor.submit(self.service.add_favorite_album, "123"),
-                executor.submit(other_service.add_favorite_album, "JM123"),
-            ]
-            results = [future.result(timeout=5) for future in futures]
-
-        self.assertTrue(favorite)
-        self.client.post.assert_called_once()
-        self.assertTrue(all(result["status"] == "success" for result in results))
-        self.assertEqual(1, sum(result["message"] == "已收藏，无需重复添加" for result in results))
+        self.assertEqual(
+            {
+                "status": "error",
+                "album_id": "0",
+                "title": "",
+                "message": "album_id must resolve to a positive numeric ID",
+            },
+            result,
+        )
+        self.client.delete_favorite_album.assert_not_called()
 
 
 class TestPostProcessCompatibility(unittest.TestCase):
