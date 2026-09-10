@@ -567,7 +567,7 @@ class TestPostProcessCompatibility(unittest.TestCase):
                 def invoke(album, downloader, **kwargs):
                     captured_params.update(kwargs)
                     output_path = Path(kwargs["dir_rule"]["base_dir"]) / "album.pdf"
-                    output_path.parent.mkdir(parents=True)
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_bytes(b"pdf")
                     downloader.record_export_filepath(album, output_path)
 

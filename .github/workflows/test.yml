@@ -8,7 +8,12 @@ on:
   pull_request:
     branches: ["master", "dev"]
   push:
-    branches: ["dev"]
+    branches:
+      - "dev"
+      - "master"
+      - "feat/**"
+      - "feature/**"
+      - "fix/**"
     paths:
       - 'src/**/*.py'
       - 'tests/**/*.py'
