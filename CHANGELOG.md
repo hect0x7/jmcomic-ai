@@ -5,6 +5,17 @@
 条目分类参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.5] - 2026-09-10
+
+### Added
+- 📁 **收藏夹与收藏列表**：新增 MCP 工具 `get_favorite_folders`、`browse_favorite_albums` 及对应 Skills 脚本，支持查询已登录账户的收藏夹、按收藏夹分页浏览，以及按收藏时间（`favorite_time`）或更新时间（`update_time`）排序；查询结果支持导出 JSON 文件。
+- ⭐ **添加与删除收藏**：新增 MCP 工具 `add_favorite_album`、`delete_favorite_album` 及对应 Skills 脚本，支持 API 和 HTML 客户端，接受纯数字 ID、JM 前缀或本子链接，并返回状态、本子 ID、标题和结果说明。顺序调用时，重复添加或删除未收藏的本子返回业务错误；脚本以非零退出码表示失败。
+- 📖 **收藏使用指引**：README、Skill 手册和脚本参考补充收藏操作示例、登录要求、参数说明及权限边界。
+
+### Changed
+- 📦 **上游依赖基线升级**：将 `jmcomic` 支持基线提升至 `>=2.7.6,<3.0.0`，锁定 `2.7.6`，适配 API 收藏接口及 HTML 添加、删除接口。
+- 🧪 **贡献检查流程**：面向 `master` 和 `dev` 的 PR 自动触发测试及 MyPy 检查；贡献指南建议在 Fork 的 `dev` 分支完成并通过检查后再提交 PR。
+
 ## [0.1.4] - 2026-08-12
 
 ### Changed
