@@ -40,8 +40,8 @@
 | 下载并生成 PDF / ZIP | 搜索本子 | 查看本子详情 | 查看排行榜 |
 | :---: | :---: | :---: | :---: |
 | ![Download and PDF](images/sample_download_album_convert_pdf.png) | ![Search Album](images/sample_search_album.png) | ![Get Album Detail](images/sample_get_album.png) | ![Month Ranking by Likes](images/sample_month_ranking_by_score.png) |
-| **修改下载配置** | **查看评论** | | |
-| ![Update Option](images/sample_update_option.png) | ![Get Album Comments](images/sample_get_comment.png) | | |
+| **修改下载配置** | **查看评论** | **添加收藏** | |
+| ![Update Option](images/sample_update_option.png) | ![Get Album Comments](images/sample_get_comment.png) | ![Add Favorite Album](images/sample_add_favorite_album.jpg) | |
 
 ---
 
@@ -145,7 +145,7 @@ skills/jmcomic/
 │   ├── ecosystem.md                # APK 获取、本地阅读与下载后承接流程
 │   ├── scripts.md                  # 脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
-└── 📂 scripts/                     # 12 个即用 CLI 脚本
+└── 📂 scripts/                     # 16 个即用 CLI 脚本
     ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
     ├── batch_download.py           # 📥 批量下载
@@ -154,6 +154,10 @@ skills/jmcomic/
     ├── album_info.py               # 📋 本子详情查询
     ├── album_comments.py           # 💬 评论与回复查询
     ├── forum_comments.py           # 🌐 全站最新评论查询
+    ├── favorite_folders.py         # 📁 获取收藏夹目录
+    ├── favorite_albums.py          # ⭐ 分页浏览收藏
+    ├── add_favorite_album.py       # ➕ 添加本子到收藏
+    ├── delete_favorite_album.py    # ➖ 从收藏移除本子
     ├── download_covers.py          # 🖼️ 批量下载封面
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
@@ -184,6 +188,15 @@ skills/jmcomic/
 | `get_album_detail` | 获取本子详情（作者/标签/浏览量等） | `album_id` |
 | `get_album_comments` | 获取评论、剧透标记与多层回复 | `album_id`, `page` |
 | `get_forum_comments` | 获取全站最新评论及来源本子 | `page` |
+
+### 收藏
+
+| 工具 | 功能 | 关键参数 |
+|:---|:---|:---|
+| `get_favorite_folders` | 获取收藏夹目录（`id`、`name`） | `username` |
+| `browse_favorite_albums` | 分页浏览收藏，返回本子摘要及总数 | `folder_id`, `page`, `order_by`, `username` |
+| `add_favorite_album` | 添加收藏，返回操作状态及结果消息 | `album_id` |
+| `delete_favorite_album` | 删除收藏，返回操作状态及结果消息 | `album_id` |
 
 ### 下载
 

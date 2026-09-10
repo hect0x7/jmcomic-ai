@@ -207,6 +207,70 @@ Each comment includes its source `album_id`. The HTML client does not expose glo
 `page_count`, so those fields may be `null`; the API client provides them when available. This tool
 is read-only and does not post comments or replies.
 
+## Favorites
+
+These scripts require valid authentication in `option.yml` (configured cookies or a login plugin).
+They do not inherit login state from a separate MCP session. All three support `--option` and print
+JSON results. The folder and album browsing scripts also accept `--output` to export their query
+results, creating missing parent directories. Service or export failures exit non-zero, as do
+structured error results.
+
+### `favorite_folders.py` - Favorite Folder Directory
+
+```bash
+python scripts/favorite_folders.py
+python scripts/favorite_folders.py --username YOUR_USERNAME --output folders.json
+```
+
+Returns `{"folders": [{"id": "123", "name": "My folder"}]}`. For HTML clients authenticated only
+by Cookie, `--username` is required; API clients ignore it and query the logged-in account.
+The folder directory may be empty, and the special all-favorites ID `"0"` may be absent.
+
+### `favorite_albums.py` - Browse Favorites
+
+```bash
+# Browse all favorites
+python scripts/favorite_albums.py
+
+# Browse one folder with a Cookie-authenticated HTML client
+python scripts/favorite_albums.py --folder-id 123 --page 2 --order-by favorite_time --username YOUR_USERNAME --output favorites.json
+```
+
+| Parameter | Tool argument | Default |
+| :--- | :--- | :--- |
+| `--folder-id` | `folder_id` | `"0"` (all favorites) |
+| `--page` | `page` | `1` |
+| `--order-by` | `order_by` | `favorite_time` |
+| `--username` | `username` | Empty; required for HTML Cookie-only queries |
+
+Returns `albums`, `total_count`, `page`, and `folder_id`, preserving the MCP response. Sorting accepts
+`favorite_time` and `update_time`. Invalid page, folder, or sort parameters produce an
+`error` field and exit code 1. An empty collection is a successful result.
+
+### `add_favorite_album.py` - Add a Favorite
+
+```bash
+python scripts/add_favorite_album.py --id 123456
+python scripts/add_favorite_album.py --id JM123456 --option /path/to/option.yml
+```
+
+`--id` maps to `album_id` and accepts a numeric ID, JM-prefixed ID, or album URL. The script saves the
+album to the account's default favorites placement and prints `status`, `album_id`, `title`, and
+`message` as JSON to stdout. An album that is already saved returns `status="error"` and stays unchanged;
+`status="error"` exits with code 1.
+
+### `delete_favorite_album.py` - Delete a Favorite
+
+```bash
+python scripts/delete_favorite_album.py --id 123456
+python scripts/delete_favorite_album.py --id JM123456 --option /path/to/option.yml
+```
+
+`--id` maps to `album_id` and accepts a numeric ID, JM-prefixed ID, or album URL. The script removes
+the album from the account's favorites and prints `status`, `album_id`, `title`, and `message` as JSON
+to stdout. An album that is not saved returns `status="error"` and stays unchanged; `status="error"` exits
+with code 1.
+
 ## 🖼️ `download_covers.py` - Batch Cover Downloads
 
 Download cover images for multiple albums:
