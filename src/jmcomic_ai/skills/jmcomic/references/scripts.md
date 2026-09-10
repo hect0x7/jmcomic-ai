@@ -210,7 +210,7 @@ is read-only and does not post comments or replies.
 ## Favorites
 
 These scripts require valid authentication in `option.yml` (configured cookies or a login plugin).
-They do not inherit login state from a separate MCP session. All three support `--option` and print
+They do not inherit login state from a separate MCP session. All four support `--option` and print
 JSON results. The folder and album browsing scripts also accept `--output` to export their query
 results, creating missing parent directories. Service or export failures exit non-zero, as do
 structured error results.
