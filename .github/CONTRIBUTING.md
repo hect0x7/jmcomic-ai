@@ -49,10 +49,21 @@ git clone --depth 1 https://github.com/hect0x7/JMComic-Crawler-Python.git refere
 ### 提交代码
 
 1. Fork 本仓库，并在自己的 Fork 中启用 GitHub Actions。
-2. 建议基于上游最新 `master` 创建或更新自己的 `dev` 分支，在该分支完成本次贡献。
+2. 按下表选择 PR 目标分支，并基于上游该分支的最新代码创建或更新自己的 `dev` 分支，在该分支完成本次贡献。
 3. 提交更改，并推送到自己的 Fork (`git push origin dev`)。
 4. 在 Fork 的 Actions 页面确认当前提交的 `Run Tests`（全部平台）和 `Run Mypy Checks` 均通过；若路径过滤未触发检查，手动运行这两个工作流并选择 `dev`。
-5. 验证通过后，再创建从 `你的 Fork:dev` 到 `hect0x7/jmcomic-ai:master` 的 PR，并在 PR 描述中附上对应提交的检查链接。
+5. 验证通过后，再创建从 `你的 Fork:dev` 到所选上游目标分支的 PR，并在 PR 描述中说明是否准备发版、附上对应提交的检查链接。Fork 中使用 `dev` 是建议，不限制贡献者的源分支名称。
+
+| 是否自行准备发版 | PR 目标分支 | 要求 |
+| --- | --- | --- |
+| 不准备发版 | `dev` | 提交功能、修复及相关测试和文档，不要求修改版本号或创建发版提交；后续由项目维护者统一准备发版。 |
+| 准备随本次贡献发版 | `master` | 在 PR 中包含完整的发版变更，满足下方“发版准备”的全部要求，包括版本号、对应 Changelog、依赖锁文件检查、完整验证及 `v{version}: 摘要` 发版提交。 |
+
+维护者从 `dev` 发版时，在 `dev` 准备发版提交并验证，再创建 `dev` → `master` 的 PR。
+推送到 `dev` 或创建 PR 都不会自动发布；发布由合并后的 `master` push 触发。
+合并发版 PR 时必须保证 **`master` 最终最新提交的标题为 `v{version}: 摘要`**，且版本与源码一致：
+使用 Squash merge 时将 squash 提交标题设为该格式；使用 Merge commit 时将合并提交标题设为该格式；
+使用 Rebase merge 时确保最后一条提交为发版提交。仅在 PR 中间包含发版提交、或只修改 PR 标题，不能保证触发发布。
 
 以 `master` 或 `dev` 为目标的 PR，在创建、追加提交或重新打开时会自动运行测试和 MyPy 检查，
 包括来自 Fork 的 PR；根据仓库审批策略，外部贡献者的工作流可能需要维护者批准后才运行。
