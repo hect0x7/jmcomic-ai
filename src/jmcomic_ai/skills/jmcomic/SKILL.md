@@ -1,6 +1,6 @@
 ---
 name: jmcomic
-description: Search, browse, inspect album-specific or site-wide comments, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
+description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse, add, and delete favorites, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
 ---
 
 # JMComic Skill
@@ -13,6 +13,7 @@ Activate this skill when the user wants to:
 - Search for manga by keyword or category
 - Browse popular manga rankings (daily, weekly, monthly)
 - Read album-specific or site-wide comments and nested replies, including spoiler flags
+- List favorite folders, browse saved albums, add an album to favorites, or delete an album from favorites
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
 - Get detailed information about a manga album
 - Configure download settings (paths, concurrency, proxies)
@@ -101,6 +102,63 @@ Use `get_album_comments(album_id: str, page: int = 1)` to read one page of comme
 
 Use `get_forum_comments(page: int = 1)` for the latest site-wide comments. It returns the same comment objects and pagination fields without an `album_id` filter; each comment's own `album_id` identifies its source album. This is also read-only.
 
+### Favorites
+
+All favorite tools require an authenticated client. Call `login` in the same MCP session or configure
+valid cookies. For HTML queries authenticated only by Cookie, pass `username`; after `login`, it can
+be omitted. The API client ignores `username` and always queries the current account. Separate script
+processes need authentication in their configuration; they do not inherit an MCP session's login.
+
+**`get_favorite_folders(username: str = "")`** returns:
+
+```python
+{"folders": [{"id": str, "name": str}]}
+```
+
+The directory can be empty. Use `folder_id="0"` to browse all favorites even if this ID is absent
+from the returned directory.
+
+**`browse_favorite_albums(folder_id: str = "0", page: int = 1, order_by: str = "favorite_time", username: str = "")`** returns:
+
+```python
+{
+    "albums": [{"id": str, "title": str, "tags": list, "cover_url": str}],
+    "total_count": int,
+    "page": int,
+    "folder_id": str,
+    "error": str  # Present only for invalid page, folder ID, or sort parameters
+}
+```
+
+Pagination starts at 1; `folder_id="0"` means all favorites. An empty result retains pagination and
+folder metadata. `order_by` accepts `favorite_time` (default) and `update_time`; the favorites list has
+its own upstream sort vocabulary, which differs from `browse_albums`. The service does not sort a page
+locally. Invalid arguments return an empty list with `error`; authentication and request failures
+propagate as tool errors, not empty collections.
+
+**`add_favorite_album(album_id: str)`** returns:
+
+```python
+{
+    "status": "success" | "error",
+    "album_id": str,
+    "title": str,   # Album title
+    "message": str
+}
+```
+
+`album_id` accepts a numeric ID, a JM-prefixed ID, or an album URL and is normalized when parsing
+succeeds. The album is saved to the account's default favorites placement.
+Adding an album that is already saved returns `status="error"` and leaves the saved state unchanged.
+
+**`delete_favorite_album(album_id: str)`** returns the same fields and takes the same `album_id` forms.
+Deleting an album that is not saved returns `status="error"` and leaves the saved state unchanged.
+
+Both tools behave identically whichever client implementation the configuration selects, and both return
+the album `title`. Name every affected album as `title (ID)`; when `title` is empty or absent, reuse an
+earlier search, browse, or detail result, or fetch the name with `get_album_detail(album_id)` or
+`python scripts/album_info.py --id ID`.
+
 ## Core Capabilities
 
 ### 🛠️ Post-Processing
@@ -131,7 +189,7 @@ This skill supports advanced post-processing of downloaded manga. It returns str
 For the full set of ZIP/PDF/LongImg × album/photo `dir_rule` examples, see `references/post_process.md`.
 
 This skill provides command-line utilities for JMComic operations. All utilities are Python scripts located in the `scripts/` directory and should be executed using Python.
- 
+
 ### Data Structure Notes
 
 Most search and browsing tools (e.g., `search_album`, `browse_albums`) return a consistent structure that supports pagination:
@@ -220,6 +278,10 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `album_info.py` | Query detailed metadata for one or many albums; print or export to JSON. |
 | `album_comments.py` | Fetch one page of album comments and recursive replies; print or export to JSON. |
 | `forum_comments.py` | Fetch one page of site-wide comments with source album IDs; print or export to JSON. |
+| `favorite_folders.py` | List favorite folders as JSON; supports `--username`, `--output`, and `--option`. |
+| `favorite_albums.py` | Browse one page of favorites as JSON; supports folder, page, sort, and username filters. |
+| `add_favorite_album.py` | Add one favorite and print its structured result as JSON; failures exit non-zero. |
+| `delete_favorite_album.py` | Delete one favorite and print its structured result as JSON; failures exit non-zero. |
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
 | `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
@@ -236,6 +298,10 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `album_info.py` | `get_album_detail` | Partial | Batch wrapper over repeated single-album calls; output format is script-defined. |
 | `album_comments.py` | `get_album_comments` | High | `--id` maps to `album_id`, `--page` maps to `page`, and the JSON response preserves the MCP result shape. |
 | `forum_comments.py` | `get_forum_comments` | High | `--page` maps to `page`, and each returned comment preserves its source `album_id`. |
+| `favorite_folders.py` | `get_favorite_folders` | High | `--username` maps to `username`; JSON preserves the MCP result shape. |
+| `favorite_albums.py` | `browse_favorite_albums` | High | `--folder-id`, `--page`, `--order-by`, `--username` map to the corresponding tool arguments. |
+| `add_favorite_album.py` | `add_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
+| `delete_favorite_album.py` | `delete_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
 | `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |

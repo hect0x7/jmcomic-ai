@@ -1,29 +1,171 @@
 """
 MCP Integration Tests - Real Server & Client Testing
 
-This module tests all MCP tools and resources using real SSE transport.
-Uses the official MCP Python SDK client for proper SSE handling.
-No mocking - actual MCP server is started and client connects to it.
+This module tests MCP tools and resources using real SSE and stdio transports.
+Favorite stdio tests use a controlled client without account or network access.
 
 Usage:
     python tests/test_mcp_integration.py
 """
 
 import contextlib
+import json
 import socket
+import sys
+import tempfile
 import time
 import unittest
+from datetime import timedelta
 from multiprocessing import Process
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
-from mcp import ClientSession
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
+from mcp.client.stdio import stdio_client
 
 # Test constants
 TEST_ALBUM_ID = "123"
 TEST_SEARCH_KEYWORD = "全彩"
 TEST_HOST = "127.0.0.1"
 TEST_PORT = 18901
+
+
+def _start_favorite_stdio_server(log_path: str):
+    """Run the real MCP server with controlled favorite responses."""
+    from jmcomic import JmApiClient
+
+    from jmcomic_ai.core import JmcomicService
+    from jmcomic_ai.mcp.server import run_server
+
+    service = object.__new__(JmcomicService)
+    service._setup_logging(log_path)
+    client = Mock(spec=JmApiClient)
+    client.is_given_type.return_value = True
+    client.favorite_folder.return_value = SimpleNamespace(
+        content=[("123", {"name": "Example album", "tags": []})],
+        total=1,
+        page_number=2,
+        iter_folder_id_name=lambda: iter([("4", "Example folder")]),
+    )
+    favorite_state = {"123": (False, "Example album"), "456": (True, "Example album 2")}
+    client.req_api.side_effect = lambda *args, params=None, **kwargs: Mock(
+        model_data={"is_favorite": favorite_state[params["id"]][0], "name": favorite_state[params["id"]][1]}
+    )
+    client.add_favorite_album.return_value = Mock(
+        model_data={"status": "ok", "msg": "Favorite added"},
+        json=Mock(return_value={"msg": "Favorite added"}),
+    )
+    client.delete_favorite_album.return_value = Mock(
+        model_data={"status": "ok", "msg": "Favorite removed"},
+        json=Mock(return_value={"msg": "Favorite removed"}),
+    )
+    service.client = client
+    run_server("stdio", service)
+
+
+class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
+    async def test_favorite_tools_over_stdio(self):
+        """Favorite tools decode arguments and return structured JSON over stdio."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            server = StdioServerParameters(
+                command=sys.executable,
+                args=[
+                    "-B",
+                    "-c",
+                    "import sys; from tests.test_mcp_integration import _start_favorite_stdio_server; "
+                    "_start_favorite_stdio_server(sys.argv[1])",
+                    str(Path(temp_dir) / "mcp.log"),
+                ],
+                cwd=str(Path(__file__).resolve().parents[1]),
+            )
+            async with stdio_client(server) as (read_stream, write_stream):
+                async with ClientSession(
+                    read_stream, write_stream, read_timeout_seconds=timedelta(seconds=10)
+                ) as session:
+                    await session.initialize()
+                    cases = [
+                        (
+                            "get_favorite_folders",
+                            {"username": "example"},
+                            {"folders": [{"id": "4", "name": "Example folder"}]},
+                        ),
+                        (
+                            "browse_favorite_albums",
+                            {"folder_id": "4", "page": 2},
+                            {"total_count": 1, "page": 2, "folder_id": "4"},
+                        ),
+                        (
+                            "add_favorite_album",
+                            {"album_id": "JM123"},
+                            {
+                                "status": "success",
+                                "album_id": "123",
+                                "title": "Example album",
+                                "message": "Favorite added",
+                            },
+                        ),
+                        (
+                            "add_favorite_album",
+                            {"album_id": "456"},
+                            {
+                                "status": "error",
+                                "album_id": "456",
+                                "title": "Example album 2",
+                                "message": "Album is already in favorites, so nothing was added.",
+                            },
+                        ),
+                        (
+                            "delete_favorite_album",
+                            {"album_id": "JM456"},
+                            {
+                                "status": "success",
+                                "album_id": "456",
+                                "title": "Example album 2",
+                                "message": "Favorite removed",
+                            },
+                        ),
+                        (
+                            "delete_favorite_album",
+                            {"album_id": "0"},
+                            {
+                                "status": "error",
+                                "title": "",
+                                "message": "album_id must resolve to a positive numeric ID",
+                            },
+                        ),
+                        (
+                            "browse_favorite_albums",
+                            {"page": 0},
+                            {"albums": [], "error": "page must be greater than or equal to 1"},
+                        ),
+                        (
+                            "browse_favorite_albums",
+                            {"order_by": "likes"},
+                            {
+                                "albums": [],
+                                "error": "Invalid order_by: likes. Valid options: favorite_time, update_time",
+                            },
+                        ),
+                        (
+                            "add_favorite_album",
+                            {"album_id": "0"},
+                            {
+                                "status": "error",
+                                "title": "",
+                                "message": "album_id must resolve to a positive numeric ID",
+                            },
+                        ),
+                    ]
+                    for name, arguments, expected in cases:
+                        with self.subTest(tool=name, arguments=arguments):
+                            result = await session.call_tool(name, arguments)
+                            self.assertFalse(result.isError, result.content)
+                            self.assertIsInstance(result.structuredContent, dict)
+                            self.assertEqual(result.structuredContent, json.loads(result.content[0].text))
+                            for key, value in expected.items():
+                                self.assertEqual(value, result.structuredContent[key])
 
 
 def _start_mcp_server(port: int):
@@ -101,6 +243,10 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "get_album_comments",
                 "get_forum_comments",
                 "browse_albums",
+                "get_favorite_folders",
+                "browse_favorite_albums",
+                "add_favorite_album",
+                "delete_favorite_album",
                 "download_album",
                 "download_photo",
                 "download_cover",
@@ -211,7 +357,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
         async def logging_callback(params):
             """捕获服务端发送的日志通知"""
             level = params.level
-            message = params.data if hasattr(params, 'data') else str(params)
+            message = params.data if hasattr(params, "data") else str(params)
             progress_events.append(f"[{level}] {message}")
             print(f"  📊 Progress: [{level}] {message}")
 
@@ -239,7 +385,9 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
         """Test update_option tool"""
         async with self._mcp_session() as session:
             print("\n=== Testing update_option ===")
-            result = await session.call_tool("update_option", {"option_updates": {"download": {"threading": {"image": 30}}}})
+            result = await session.call_tool(
+                "update_option", {"option_updates": {"download": {"threading": {"image": 30}}}}
+            )
             print(f"  Result: {result}")
             self.assertIsNotNone(result)
             print("\n[OK] update_option executed successfully")
