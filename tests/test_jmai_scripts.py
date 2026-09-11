@@ -72,6 +72,30 @@ class TestPostProcessOutdir(unittest.TestCase):
 
 
 class TestPostProcessDependencies(unittest.TestCase):
+    def test_invalid_argument_combo_does_not_install_dependencies(self):
+        """参数组合非法时应在装依赖之前就退出，不要改动环境。"""
+        with (
+            patch("sys.argv", [
+                "script", "--id", "1", "--type", "img2pdf",
+                "--outdir", "/x", "--dir-rule", "Bd/a.pdf", "--base-dir", "/y",
+            ]),
+            patch.object(post_process, "ensure_dependencies") as ensure,
+            self.assertRaises(SystemExit),
+        ):
+            post_process.main()
+        ensure.assert_not_called()
+
+    def test_password_with_long_img_is_rejected_before_install(self):
+        with (
+            patch("sys.argv", [
+                "script", "--id", "1", "--type", "long_img", "--password", "pw",
+            ]),
+            patch.object(post_process, "ensure_dependencies") as ensure,
+            self.assertRaises(SystemExit),
+        ):
+            post_process.main()
+        ensure.assert_not_called()
+
     def test_dependency_is_skipped_when_already_installed(self):
         with (
             patch.object(post_process.importlib.util, "find_spec", return_value=object()),
