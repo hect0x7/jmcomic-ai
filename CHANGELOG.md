@@ -4,6 +4,19 @@
 
 条目分类参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+## [0.1.6] - 2026-09-11
+
+### Fixed
+- 📦 **后处理输出目录路径解析**：修正 `post_process.py` 中 `--outdir` 参数直接将规则设为 `"Bd"` 导致尝试写入目录报错 `PermissionError` 的问题，改为根据相册级/章节级及生成类型动态构造文件名规则 `Bd/{filename}.{ext}`，确保文件正确生成在目标目录内。
+- 🔍 **搜索导出跨页去重**：`search_export.py` 翻页抓取改用相册 ID 去重，避免重复相册多页导出，同时向外传递接口返回的 `total_count`。
+
+### Added
+- 🏷️ **标签多选与详情补全**：`search_export.py` 新增 `--tags`（支持逗号分隔且必须全部满足的精确匹配）与 `--enrich`（自动调取本子详情补全 likes、views、pictures、author 等统计字段，并在 CSV 导出中动态包含）。
+- 🛠️ **后处理可选依赖前置检查**：`post_process.py` 新增 `img2pdf` / `Pillow` 依赖前置检测与缺失自动安装机制，支持通过 `--no-install-deps` 参数关闭自动安装。
+- 🧪 **脚本回归测试套件**：新增 `tests/test_jmai_scripts.py`，完整覆盖输出规则、依赖检测、去重、标签过滤及结构化导出。
+
+### Changed
+- 📄 **搜索导出 JSON 结构规范化**：`search_export.py` 导出 JSON 改为符合 CLI/MCP 约定的 `{"albums": [...], "total_count": ...}` 统一包装结构。
 
 ## [0.1.5] - 2026-09-10
 
