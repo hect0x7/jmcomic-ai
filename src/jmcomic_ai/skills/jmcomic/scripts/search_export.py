@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument("--tags", type=str, default="",
                         help="Comma-separated tags; keep only albums having ALL of them (exact match, e.g. '明日方舟,触手')")
     parser.add_argument("--enrich", action="store_true",
-                        help="Fetch per-album details (likes/views/pictures/author) after search; slower but stats are complete")
+                        help="Fetch per-album details (likes/views/chapter_count/author) after search; slower but stats are complete")
 
     return parser.parse_args()
 
@@ -116,7 +116,7 @@ def fetch_results(service: JmcomicService, args) -> tuple[list[dict], int | None
 
 
 def enrich_results(service: JmcomicService, albums: list[dict]) -> list[dict]:
-    """Fill in per-album stats (likes/views/pictures/author) via get_album_detail."""
+    """Fill in per-album stats (likes/views/chapter_count/author) via get_album_detail."""
     filled = []
     total = len(albums)
     for i, album in enumerate(albums, 1):

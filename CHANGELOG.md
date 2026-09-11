@@ -3,7 +3,15 @@
 本文件记录 JMComic AI 的所有重要更新。
 
 条目分类参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+## [0.1.7] - 2026-09-11
+
+### Fixed
+- 🛡️ **后处理参数前置校验**：将 `post_process.py` 中的依赖检查与自动安装移至全部命令行参数校验之后，确保参数组合非法或密码参数受限时直接报错退出，避免因无效命令错误修改用户的 Python 运行环境。
+- 📝 **搜索导出详情字段对齐**：更正 `search_export.py` 的 `--enrich` 帮助说明及脚本参考文档，将实际不存在的 `pictures` 字段更正为底层真实返回的 `chapter_count`。
+
+### Added
+- 🧪 **参数前置校验回归测试**：`tests/test_jmai_scripts.py` 补充针对非法参数组合及限制参数的断言测试，确保参数错误时绝不触发依赖检测与安装。
+
 ## [0.1.6] - 2026-09-11
 
 ### Fixed

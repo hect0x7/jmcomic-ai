@@ -62,8 +62,6 @@ def main():
 
     args = parser.parse_args()
 
-    ensure_dependencies(args.type, auto_install=not getattr(args, "no_install_deps", False))
-
     if args.outdir and (args.dir_rule or args.base_dir):
         parser.error("--outdir cannot be used with --dir-rule/--base-dir")
 
@@ -73,14 +71,18 @@ def main():
     if args.base_dir and not args.dir_rule:
         parser.error("--dir-rule is required when using --base-dir")
 
+    if args.password and args.type == "long_img":
+        parser.error("--password is only supported for zip or img2pdf")
+
+    # 参数校验全部通过后再装依赖，避免无效命令也去改环境
+    ensure_dependencies(args.type, auto_install=not getattr(args, "no_install_deps", False))
+
     service = JmcomicService(args.option)
 
     params = {"level": args.level}
     if args.delete:
         params["delete_original_file"] = True
     if args.password:
-        if args.type == "long_img":
-            parser.error("--password is only supported for zip or img2pdf")
         params["encrypt"] = {"password": args.password}
 
     if args.dir_rule and args.base_dir:
