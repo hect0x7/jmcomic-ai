@@ -143,10 +143,21 @@ python scripts/search_export.py --category doujin --output doujin.csv --max-page
 **Features**:
 - ✅ Search by keyword, ranking, or category
 - ✅ Multi-page support with `--max-pages`
-- ✅ Export to CSV or JSON format
+- ✅ Export to CSV or JSON format (JSON uses the documented `{albums, total_count}` shape)
+- ✅ Cross-page de-duplication by album id, with `total_count` propagated to the export
+- ✅ `--tags` keeps only albums carrying every given tag (exact, case-insensitive match)
+- ✅ `--enrich` fills per-album stats (likes/views/pictures/author) via `get_album_detail`
 - ✅ CSV columns include every field returned across the fetched result set
 - ✅ Create missing parent directories for output files
 - ✅ Useful for building album catalogs and collections
+
+```bash
+# Keep only albums that carry every given tag (exact match)
+python scripts/search_export.py --keyword "搜索词" --tags "tag-a,tag-b" --output filtered.csv
+
+# Enrich each album with likes / views / pictures / author (one extra request per album)
+python scripts/search_export.py --keyword "搜索词" --enrich --output enriched.json
+```
 
 ## 📖 `album_info.py` - Album Information Query
 
@@ -338,4 +349,6 @@ python scripts/post_process.py --id 123456 --type zip --dir-rule "Bd/{Atitle}/{P
 - ✅ Supports ZIP, PDF, and Long Image formats
 - ✅ Option to encrypt output (Zip/PDF)
 - ✅ Automatic cleanup of original files
+- ✅ `--outdir` writes into the given directory using a type-aware filename rule (`Bd/{name}.{ext}`) instead of resolving to the directory itself
 - ✅ Custom output directories
+- ✅ Missing optional dependencies (img2pdf / Pillow) are pre-checked and auto-installed; `--no-install-deps` opts out

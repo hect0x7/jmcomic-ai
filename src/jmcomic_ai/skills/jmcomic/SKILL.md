@@ -274,7 +274,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `batch_download.py` | Download multiple albums from a list of IDs (CLI or file) with progress/error summary. |
 | `download_photo.py` | Download specific chapters/photos without fetching whole albums. |
 | `validate_config.py` | Validate `option.yml` and convert between YAML and JSON. |
-| `search_export.py` | Search by keyword/ranking/category and export to CSV or JSON (multi-page). |
+| `search_export.py` | Search by keyword/ranking/category and export to CSV or JSON (multi-page); `--tags` keeps only albums carrying every given tag, `--enrich` fills per-album stats. |
 | `album_info.py` | Query detailed metadata for one or many albums; print or export to JSON. |
 | `album_comments.py` | Fetch one page of album comments and recursive replies; print or export to JSON. |
 | `forum_comments.py` | Fetch one page of site-wide comments with source album IDs; print or export to JSON. |
@@ -284,7 +284,7 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | `delete_favorite_album.py` | Delete one favorite and print its structured result as JSON; failures exit non-zero. |
 | `download_covers.py` | Batch download album cover images to a custom output directory. |
 | `ranking_tracker.py` | Track day/week/month rankings over time; export snapshots with timestamps. |
-| `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL. |
+| `post_process.py` | Convert downloads to ZIP/PDF/LongImg, with optional encryption and `dir_rule` DSL; `--outdir` uses a safe file rule and missing deps are auto-installed (`--no-install-deps` to opt out). |
 | `download_latest_apk.py` | Download the latest APK published by `hect0x7/JMComic-APK`; supports optional `output_dir`, `--force`, and `--json` (run `--help` for current usage). |
 
 ## Script Parameters ↔ MCP Tools Mapping
