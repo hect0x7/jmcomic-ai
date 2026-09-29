@@ -59,7 +59,7 @@
 | 🩺 **诊断** | 检查运行环境、配置文件、网络与域名可用性 |
 | 📱 **APK 获取** | 从 `hect0x7/JMComic-APK` 的最新 GitHub Release 下载安卓安装包 |
 | 📖 **本地阅读** | Agent 直接调用可选依赖 `jm-view-server` 提供的 `jms`，用电脑或手机浏览器阅读已下载内容 |
-| 🧠 **Skills + CLI** | 技能手册、11 个配套脚本，以及 `jmai` / `jmcomic-ai` 命令行入口 |
+| 🧠 **Skills + CLI** | 技能手册、18 个配套脚本，以及 `jmai` / `jmcomic-ai` 命令行入口 |
 | 🔌 **MCP** | 10 个工具、3 个知识资源，支持 stdio、SSE 与 HTTP 传输 |
 
 ---
@@ -145,9 +145,10 @@ skills/jmcomic/
 │   ├── ecosystem.md                # APK 获取、本地阅读与下载后承接流程
 │   ├── scripts.md                  # 脚本的完整使用手册
 │   └── examples.md                 # 端到端使用范例
-└── 📂 scripts/                     # 16 个即用 CLI 脚本
+└── 📂 scripts/                     # 18 个即用 CLI 脚本
     ├── _script_utils.py            # 内部公共逻辑（导入错误诊断）
     ├── doctor.py                   # 🩺 环境诊断
+    ├── check_domains.py            # 🌐 域名健康检查
     ├── batch_download.py           # 📥 批量下载
     ├── download_photo.py           # 📥 单章下载
     ├── search_export.py            # 🔍 搜索并导出 CSV/JSON
@@ -162,6 +163,7 @@ skills/jmcomic/
     ├── ranking_tracker.py          # 📊 排行榜追踪
     ├── post_process.py             # 📦 后处理（ZIP/PDF/长图）
     ├── validate_config.py          # ✅ 配置校验与格式转换
+    ├── login.py                    # 🔐 登录与会话管理
     └── download_latest_apk.py      # 📱 下载最新安卓 APK
 ```
 

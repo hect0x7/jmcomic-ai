@@ -58,6 +58,41 @@ python scripts/doctor.py
 - ✅ Configuration file status
 - ✅ Network connectivity (discovers and tests available JMComic domains)
 
+## 🌐 `check_domains.py` - Domain Health Diagnostic & Benchmark
+
+Test latency, HTTP status, redirect chains (301/302), and Cloudflare WAF challenges (403) across all candidate JMComic domains:
+
+HTML candidates keep any path published by JMComic (for example `jm-88.cc/ZNPJam`); API candidates must return the expected `/setting` response envelope before they are recommended.
+
+```bash
+# Check all domains (HTML and API)
+python scripts/check_domains.py
+
+# Check only HTML domains and output the best recommended domain
+python scripts/check_domains.py --type html --best
+
+# Test using a custom local proxy with JSON output
+python scripts/check_domains.py --proxy http://127.0.0.1:7890 --json
+```
+
+**Parameters**:
+
+| Parameter | Description | Default |
+| :--- | :--- | :--- |
+| `--type` | Domain category to test: `all`, `html`, or `api` | `all` |
+| `--proxy` | Proxy URL (e.g. `http://127.0.0.1:7890`) or `none` | Auto-detected / option |
+| `--auto-proxy` / `--no-auto-proxy` | Enable or disable local proxy auto-detection (ports 7890, 7897, 10808) when no proxy is configured | `True` |
+| `--best` | Print only the best working domain(s) | `False` |
+| `--json` | Print structured diagnostic JSON | `False` |
+| `--timeout` | Request timeout per domain in seconds | `5` |
+| `--option` | Path to `option.yml` file | System default |
+
+This tool clearly identifies:
+- 🟢 **Available**: Direct 200 OK nodes (e.g. `18comic.ink`, `www.cdnhjk.net`).
+- 🟡 **Redirect**: Intermediate landing / bounce domains that 301/302 redirect elsewhere.
+- 🔴 **Blocked**: Domains intercepted by Cloudflare Turnstile / WAF (403).
+- ⚪ **Reset / Timeout / SSL**: Network-level blocking or expired TLS certificates.
+
 **Use this when**:
 - Setting up the skill for the first time
 - Troubleshooting any issues
@@ -217,6 +252,43 @@ python scripts/forum_comments.py --page 2 --output forum-comments.json
 Each comment includes its source `album_id`. The HTML client does not expose global `total` or
 `page_count`, so those fields may be `null`; the API client provides them when available. This tool
 is read-only and does not post comments or replies.
+
+## 🔐 Authentication & Session Management
+
+### `login.py` - User Login and Cookie Persistence
+
+Authenticate against the JMComic API and/or HTML endpoints, display account statistics (level, EXP, coin balance, favorite counts), and optionally save the authenticated `AVS` session cookie directly to `option.yml`:
+
+```bash
+# Verify both API and HTML login
+python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD
+
+# Verify API login only and save the session cookie to option.yml
+python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --impl api --save
+
+# Verify HTML login with a specific domain and save credentials
+python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --impl html --domain 18comic.ink --save
+
+# Return machine-readable JSON
+python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --json
+```
+
+**Parameters**:
+
+| Parameter | Description | Default |
+| :--- | :--- | :--- |
+| `-u`, `--username` | Account username | `JM_USERNAME` env var or interactive prompt |
+| `-p`, `--password` | Account password | `JM_PASSWORD` env var or interactive prompt |
+| `--impl` | Implementation to test: `both`, `api`, or `html` | `both` |
+| `--domain` | Custom domain override | Auto-recommended (`18comic.ink` for HTML) |
+| `--proxy` | Custom proxy URL (e.g. `http://127.0.0.1:7890`) or `none` | Auto-detected / option |
+| `--save` | Write valid session cookie (`AVS`) and verified domain to `option.yml` | `False` |
+| `--option` | Path to `option.yml` file | System default |
+| `--json` | Output structured JSON result | `False` |
+
+The script delegates HTML login validation to `jmcomic>=2.7.7`, which rejects the HTTP 200 error response returned for an invalid password. A failed implementation or failed `--save` update exits non-zero.
+
+Saving with `--save` writes the session cookie under `client.postman.meta_data.cookies.AVS` and updates `client.impl` when specified, ensuring that subsequent CLI scripts (like `favorite_albums.py`) run with a valid authenticated session.
 
 ## Favorites
 

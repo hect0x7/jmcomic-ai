@@ -68,7 +68,7 @@ Both `download_album` and `download_photo` return structured dictionaries:
 
 **File-only Logging**: Regular `jmcomic`, `jmcomic_ai`, and MCP runtime logs share `~/.jmcomic-ai/jmcomic_ai.log` and are not emitted to stdout or stderr. Set `JM_LOG_PATH` to override the global log file. MCP protocol messages and explicit CLI result output are unaffected.
 
-**Upstream Rich Terminal Progress**: `jmcomic 2.7.4` adds the optional `download_progress` plugin with `log_file` and `terminal_log_lines`. Recommend it only when the user explicitly wants Rich progress in an interactive terminal. Do not enable it for `jmai` MCP/stdio downloads, which already use MCP Context notifications and isolated task logs.
+**Upstream Rich Terminal Progress**: `jmcomic 2.7.7` includes the optional `download_progress` plugin with `log_file` and `terminal_log_lines`. Recommend it only when the user explicitly wants Rich progress in an interactive terminal. Do not enable it for `jmai` MCP/stdio downloads, which already use MCP Context notifications and isolated task logs.
 
 ### Album Comments
 
@@ -271,6 +271,8 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | Script | Purpose |
 | :--- | :--- |
 | `doctor.py` | Environment diagnostics: Python version, deps, config status, network/domain checks. |
+| `check_domains.py` | Comprehensive domain health checker: tests latency, HTTP status, redirect chains (301/302), Cloudflare WAF challenges (403), and SSL validity across API and HTML candidate domains; outputs best recommended domains. |
+| `login.py` | Authenticate with JMComic (API/HTML/both), query user statistics (UID, coins, EXP, level, favorites), and optionally persist session cookies (AVS) directly to `option.yml` (`--save`). |
 | `batch_download.py` | Download multiple albums from a list of IDs (CLI or file) with progress/error summary. |
 | `download_photo.py` | Download specific chapters/photos without fetching whole albums. |
 | `validate_config.py` | Validate `option.yml` and convert between YAML and JSON. |
@@ -308,6 +310,8 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `download_photo.py` | `download_photo` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
 | `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
 | `download_latest_apk.py` | None | None | Reads the public `hect0x7/JMComic-APK` GitHub Release API directly. |
+| `login.py` | `login` | High | Supports `--username`, `--password`, `--impl`, `--domain`, `--proxy`, and `--save` to update option.yml. |
+| `check_domains.py` | None | None | Diagnostic domain health checker and benchmark utility; not a direct MCP tool wrapper. |
 
 ### Mapping Policy
 
