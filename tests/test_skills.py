@@ -134,6 +134,14 @@ class TestSkillPlatformCli(unittest.TestCase):
 
 
 class TestSkillManagerSafety(unittest.TestCase):
+    def _create_symlink_or_skip(self, link: Path, source: Path) -> None:
+        try:
+            link.symlink_to(source, target_is_directory=True)
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == 1314:
+                self.skipTest("Creating symlinks requires extra privileges on Windows")
+            raise
+
     def test_uninstalling_symlink_preserves_source_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -145,7 +153,7 @@ class TestSkillManagerSafety(unittest.TestCase):
             target_dir = temp_path / "target"
             target_dir.mkdir()
             skill_link = target_dir / "jmcomic"
-            skill_link.symlink_to(source_dir, target_is_directory=True)
+            self._create_symlink_or_skip(skill_link, source_dir)
 
             manager = SkillManager()
             manager.skills_source_dir = source_dir
@@ -167,7 +175,7 @@ class TestSkillManagerSafety(unittest.TestCase):
             target_dir = temp_path / "target"
             target_dir.mkdir()
             skill_link = target_dir / "jmcomic"
-            skill_link.symlink_to(source_dir, target_is_directory=True)
+            self._create_symlink_or_skip(skill_link, source_dir)
 
             result = CliRunner().invoke(
                 app,

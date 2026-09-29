@@ -8,10 +8,20 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from jmcomic import JmModuleConfig
+
 from jmcomic_ai.skills.jmcomic.scripts import check_domains, login
 
 
-class TestLoginScript(unittest.TestCase):
+class _JmLogStateIsolation:
+    def setUp(self):
+        self._jm_log_enabled = JmModuleConfig.FLAG_ENABLE_JM_LOG
+
+    def tearDown(self):
+        JmModuleConfig.FLAG_ENABLE_JM_LOG = self._jm_log_enabled
+
+
+class TestLoginScript(_JmLogStateIsolation, unittest.TestCase):
     def test_api_login_passes_custom_domain_and_catches_client_setup_failure(self):
         service = Mock()
         client = Mock()
@@ -249,7 +259,7 @@ class TestLoginScript(unittest.TestCase):
         self.assertIn("option update failed", message)
 
 
-class TestCheckDomainsScript(unittest.TestCase):
+class TestCheckDomainsScript(_JmLogStateIsolation, unittest.TestCase):
     def test_discovered_html_path_is_preserved(self):
         with patch.object(
             check_domains.JmModuleConfig,
