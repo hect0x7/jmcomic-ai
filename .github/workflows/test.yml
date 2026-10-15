@@ -53,10 +53,9 @@ jobs:
           uv sync
 
       - name: Run tests with unittest
-        working-directory: tests
         env:
           PYTHONIOENCODING: utf-8
-        run: uv run python -m unittest discover -v
+        run: uv run python -m unittest discover -s tests -t . -v
 
       - name: Upload test logs on failure
         if: failure()

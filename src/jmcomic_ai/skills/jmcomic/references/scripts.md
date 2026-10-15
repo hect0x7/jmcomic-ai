@@ -7,7 +7,7 @@ lists. All tools support the `--help` flag for detailed usage information.
 > **Prerequisite**: Most scripts import `jmcomic_ai`, so they must run in an environment where the
 > `jmcomic-ai` package is installed (e.g. `pip install jmcomic-ai`, or `uv run python scripts/<name>.py`
 > from a synced checkout). If `jmai` was installed into an isolated venv via `uv tool`/`pipx`, invoke
-> the scripts with that same interpreter, or just use the MCP tools instead.
+> the scripts with that same interpreter. Download workflows can also use the installed `jmai download` command.
 
 The APK helper remains a `jmcomic-ai` script. Local reading is different: run upstream `jms --help`
 first, then invoke `jms` directly as described in `references/ecosystem.md`; there is no
@@ -16,6 +16,13 @@ first, then invoke `jms` directly as described in `references/ecosystem.md`; the
 Output file paths follow the current working directory. Export scripts automatically create missing
 parent directories before writing. Commands that finish with any failed item return a non-zero process
 exit code, so shell scripts and agents can reliably distinguish complete success from partial failure.
+
+## Downloads
+
+For downloads, start with `jmai download --help`. Read
+[download_workflows.md](download_workflows.md) for batch input, export options, worker limits and
+background task control. `batch_download.py` and `download_photo.py` provide album/chapter script
+entrypoints to the same download engine; their examples below cover the script-specific invocation.
 
 ## 📱 `download_latest_apk.py` - Latest Android APK
 
@@ -117,7 +124,7 @@ python scripts/batch_download.py --ids 123456,789012 --option /path/to/option.ym
 - ✅ Download multiple albums concurrently
 - ✅ Progress tracking with success/failure counts
 - ✅ Error handling and summary report
-- ✅ Print each download's dedicated task log path on success or failure
+- ✅ Return the batch task ID, report path and log path
 
 ## 📷 `download_photo.py` - Batch Chapter Downloads
 
@@ -138,7 +145,7 @@ python scripts/download_photo.py --ids 123456,789012 --option /path/to/option.ym
 - ✅ Download specific chapters without downloading entire albums
 - ✅ Useful for selective chapter downloads
 - ✅ Progress tracking and error handling
-- ✅ Print each download's dedicated task log path on success or failure
+- ✅ Return the batch task ID, report path and log path
 
 ## ✅ `validate_config.py` - Configuration Validation
 

@@ -14,7 +14,6 @@ Usage:
 import argparse
 import asyncio
 import sys
-from pathlib import Path
 
 try:
     from ._script_utils import exit_for_import_error
@@ -22,7 +21,7 @@ except ImportError:
     from _script_utils import exit_for_import_error  # type: ignore[no-redef]
 
 try:
-    from jmcomic import JmcomicText
+    from jmcomic import JmcomicException, JmcomicText
 except ImportError as exc:
     exit_for_import_error(exc, "jmcomic", "Please install: pip install jmcomic")
 
@@ -43,86 +42,47 @@ def parse_args():
     # Options
     parser.add_argument("--option", type=str, help="Path to option.yml file")
 
+    from jmcomic_ai.download_cli import add_download_arguments
+
+    add_download_arguments(parser)
     return parser.parse_args()
 
 
 def load_photo_ids(args) -> list[str]:
-    """Load photo IDs from arguments"""
-    if args.ids:
-        return [JmcomicText.parse_to_jm_id(pid.strip()) for pid in args.ids.split(",") if pid.strip()]
+    """Load the shared UTF-8/BOM-aware ID list and preserve upstream parsing."""
+    from jmcomic_ai.download_cli import read_ids
 
-    if args.file:
-        file_path = Path(args.file)
-        if not file_path.exists():
-            print(f"❌ Error: File not found: {file_path}")
-            sys.exit(1)
-
-        with open(file_path, encoding="utf-8") as f:
-            values = (line.strip() for line in f)
-            return [JmcomicText.parse_to_jm_id(value) for value in values if value and not value.startswith("#")]
-
-    return []
+    try:
+        return [JmcomicText.parse_to_jm_id(value) for value in read_ids(args.ids, args.file)]
+    except JmcomicException as error:
+        raise ValueError(str(error)) from error
 
 
 async def main():
     args = parse_args()
-    photo_ids = load_photo_ids(args)
+    from jmcomic_ai.download_cli import run_download, script_exit
 
-    if not photo_ids:
-        print("❌ Error: No photo IDs provided")
-        sys.exit(1)
+    try:
+        photo_ids = load_photo_ids(args)
+        if not photo_ids:
+            raise ValueError("No photo IDs provided")
+        if getattr(args, "details", False) and not getattr(args, "plan", False):
+            raise ValueError("--details requires --plan")
+        if getattr(args, "background", False):
+            from jmcomic_ai.background import from_arguments
 
-    print("📷 Batch Photo Download Tool")
-    print(f"{'=' * 50}")
-    print(f"Total chapters to download: {len(photo_ids)}")
-    print(f"{'=' * 50}\n")
-
-    # Initialize service
-    service = JmcomicService(option_path=args.option)
-
-    # Download each photo
-    success_count = 0
-    failed_ids = []
-
-    print("Queuing downloads...")
-    tasks = []
-    for i, photo_id in enumerate(photo_ids, 1):
-        tasks.append(service.download_photo(photo_id))
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    for i, (photo_id, result) in enumerate(zip(photo_ids, results), 1):
-        if isinstance(result, asyncio.CancelledError):
-            raise result
-        if isinstance(result, Exception):
-            print(f"❌ Failed to download chapter {photo_id}: {result}")
-            failed_ids.append(photo_id)
-        elif result.get("status") == "success":
-            print(f"✅ Successfully downloaded chapter {photo_id} ({result.get('image_count')} images)")
-            print(f"   📂 {result.get('download_path')}")
-            print(f"   📝 {result.get('log_path')}")
-            success_count += 1
+            result = from_arguments(args, photo_ids, "photo")
         else:
-            print(f"❌ Failed to download chapter {photo_id}: {result.get('error')}")
-            print(f"   📝 {result.get('log_path')}")
-            failed_ids.append(photo_id)
-
-    # Summary
-    print(f"\n{'=' * 50}")
-    print("📊 Download Summary:")
-    print(f"✅ Successful: {success_count}/{len(photo_ids)}")
-    print(f"❌ Failed: {len(failed_ids)}/{len(photo_ids)}")
-
-    if failed_ids:
-        print("\nFailed chapter IDs:")
-        for pid in failed_ids:
-            print(f"  - {pid}")
-
-    print(f"{'=' * 50}")
-
-    if failed_ids:
-        sys.exit(1)
+            task_dir = getattr(args, "task_dir", None)
+            service = JmcomicService(option_path=args.option, **({"task_log_dir": task_dir} if task_dir else {}))
+            result = await run_download(service, args, photo_ids, "photo")
+    except (ValueError, OSError) as error:
+        result = {"status": "error", "error": str(error)}
+    script_exit(result, getattr(args, "json", False))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(130)

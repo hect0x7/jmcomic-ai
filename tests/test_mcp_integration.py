@@ -10,13 +10,14 @@ Usage:
 
 import contextlib
 import json
+import os
 import socket
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from datetime import timedelta
-from multiprocessing import Process
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -24,6 +25,8 @@ from unittest.mock import Mock
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
+
+from tests.process_policy import NO_WINDOW, hidden_windows_processes, stdio_python
 
 # Test constants
 TEST_ALBUM_ID = "123"
@@ -66,11 +69,16 @@ def _start_favorite_stdio_server(log_path: str):
 
 
 class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        policy = hidden_windows_processes()
+        policy.__enter__()
+        self.addCleanup(policy.__exit__, None, None, None)
+
     async def test_favorite_tools_over_stdio(self):
         """Favorite tools decode arguments and return structured JSON over stdio."""
         with tempfile.TemporaryDirectory() as temp_dir:
             server = StdioServerParameters(
-                command=sys.executable,
+                command=stdio_python(),
                 args=[
                     "-B",
                     "-c",
@@ -170,11 +178,20 @@ class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
 
 def _start_mcp_server(port: int):
     """Start MCP server in a subprocess"""
+    # The live suite must never update the developer's personal option or download directory.
+    from jmcomic import JmOption
+
     from jmcomic_ai.core import JmcomicService
     from jmcomic_ai.mcp.server import run_server
 
-    service = JmcomicService()
-    run_server("sse", service, host=TEST_HOST, port=port)
+    with tempfile.TemporaryDirectory() as root:
+        root_path = Path(root)
+        option_path = root_path / "option.yml"
+        option = JmOption.construct({"dir_rule": {"base_dir": str(root_path / "downloads")},
+                                     "client": {"retry_times": 1, "postman": {"meta_data": {"timeout": 10}}}})
+        option.to_file(str(option_path))
+        service = JmcomicService(str(option_path), str(root_path / "tasks"), str(root_path / "server.log"))
+        run_server("sse", service, host=TEST_HOST, port=port)
 
 
 def wait_for_server(port: int, timeout: float = 30.0) -> bool:
@@ -195,6 +212,7 @@ def wait_for_server(port: int, timeout: float = 30.0) -> bool:
     return False
 
 
+@unittest.skipUnless(os.getenv("JM_RUN_LIVE_TESTS") == "1", "Live network suite: set JM_RUN_LIVE_TESTS=1 explicitly")
 class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
     _server_proc = None
     _server_url = None
@@ -202,8 +220,12 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         """Start MCP SSE server"""
-        cls._server_proc = Process(target=_start_mcp_server, args=(TEST_PORT,))
-        cls._server_proc.start()
+        cls._server_proc = subprocess.Popen(
+            [sys.executable, "-B", "-c", "import sys; from tests.test_mcp_integration import _start_mcp_server; "
+             "_start_mcp_server(int(sys.argv[1]))", str(TEST_PORT)],
+            cwd=str(Path(__file__).resolve().parents[1]), stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
+        )
 
         if not wait_for_server(TEST_PORT):
             cls._server_proc.terminate()
@@ -216,7 +238,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
         """Stop MCP SSE server"""
         if cls._server_proc:
             cls._server_proc.terminate()
-            cls._server_proc.join(timeout=5)
+            cls._server_proc.wait(timeout=5)
 
     @contextlib.asynccontextmanager
     async def _mcp_session(self):
