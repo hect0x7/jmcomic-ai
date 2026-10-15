@@ -176,10 +176,10 @@ class TestBackgroundTasks(unittest.TestCase):
         self.task_ids.append(retry["task_id"])
         finished = self.wait_terminal(retry["task_id"])
         self.assertEqual("success", finished["status"])
-        self.assertEqual(str(output), finished["plan"]["base_dir"])
+        self.assertTrue(output.samefile(finished["plan"]["base_dir"]))
         foreground = self.cli("task", "retry", original["task_id"], "--foreground", "--json", cwd=other)
         self.task_ids.append(foreground["task_id"])
-        self.assertEqual(str(output), foreground["plan"]["base_dir"])
+        self.assertTrue(output.samefile(foreground["plan"]["base_dir"]))
         self.assertFalse((other / "downloads").exists())
 
     def test_startup_queries_do_not_compete_for_workers_execution_lease(self):

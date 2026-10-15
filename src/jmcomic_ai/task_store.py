@@ -3,6 +3,7 @@
 import errno
 import json
 import os
+import sys
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -92,7 +93,7 @@ class TaskLease:
                 stream.write(b"0")
                 stream.flush()
             stream.seek(0)
-            if os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
 
                 msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)

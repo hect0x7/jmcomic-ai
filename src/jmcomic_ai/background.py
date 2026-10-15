@@ -1,6 +1,5 @@
 """Explicit per-task launchers. No daemon, listener or persistent scheduling queue."""
 
-import os
 import subprocess
 import sys
 import threading
@@ -77,8 +76,9 @@ def launch_background(
                 "cwd": str(cwd),
                 "close_fds": True,
             }
-            if os.name == "nt":
-                kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            if sys.platform == "win32":
+                # CREATE_NO_WINDOW is ignored when combined with DETACHED_PROCESS.
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
             else:
                 kwargs["start_new_session"] = True
             process = subprocess.Popen(command, **kwargs)

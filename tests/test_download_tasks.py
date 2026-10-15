@@ -99,7 +99,9 @@ class TestDownloadTasks(unittest.IsolatedAsyncioTestCase):
                 await task
         for logger in (logging.getLogger(), logging.getLogger("jmcomic_ai"), logging.getLogger("jmcomic")):
             for handler in list(logger.handlers):
-                if isinstance(handler, logging.FileHandler) and str(self.root) in handler.baseFilename:
+                if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename).resolve().is_relative_to(
+                    self.root.resolve()
+                ):
                     logger.removeHandler(handler)
                     handler.close()
         self.temporary.cleanup()
