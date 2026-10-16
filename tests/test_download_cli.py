@@ -184,5 +184,44 @@ class TestPlanOutput(unittest.TestCase):
         self.assertEqual(result, json.loads(output.getvalue()))
 
 
+class TestActualDownloadIdOutput(unittest.TestCase):
+    def test_startup_report_failure_is_visible_without_suggesting_unavailable_retry(self):
+        report = {
+            "status": "failed", "task_id": "example-task", "log_path": "task.log",
+            "report_path": "task.json", "plan": {"kind": "album"}, "unfinished_ids": ["1"],
+            "items": [], "error": "Controlled startup failure", "report_error": "Controlled write failure",
+        }
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print_result(report)
+        self.assertIn("Task: example-task", output.getvalue())
+        self.assertIn("Task report could not be saved: Controlled write failure", output.getvalue())
+        self.assertNotIn("Retry:", output.getvalue())
+
+    def test_text_and_json_keep_requested_and_actual_ids(self):
+        for kind in ("album", "photo"):
+            for actual_id in ("1", "9001"):
+                report = {
+                    "status": "success", "task_id": "example-task", "log_path": "task.log",
+                    "report_path": "task.json", "plan": {"kind": kind}, "unfinished_ids": [],
+                    "items": [{"id": "1", "actual_id": actual_id, "status": "success"}],
+                }
+                with self.subTest(kind=kind, actual_id=actual_id):
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        print_result(report)
+                    self.assertIn("1: success", output.getvalue())
+                    if actual_id != "1":
+                        self.assertIn(f"Upstream {kind} ID: 9001", output.getvalue())
+                    else:
+                        self.assertNotIn("Upstream", output.getvalue())
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        print_result(report, as_json=True)
+                    item = json.loads(output.getvalue())["items"][0]
+                    self.assertEqual("1", item["id"])
+                    self.assertEqual(actual_id, item["actual_id"])
+
+
 if __name__ == "__main__":
     unittest.main()

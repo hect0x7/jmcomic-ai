@@ -27,6 +27,14 @@ from jmcomic_ai.task_store import TERMINAL, TaskLease, TaskStore, utc_now
 EXPORTS = {"zip": Feature.export_zip, "pdf": Feature.export_pdf, "long_img": Feature.export_long_img}
 
 
+class DownloadStartError(RuntimeError):
+    """An allocated task could not start; retain its terminal diagnostic report."""
+
+    def __init__(self, state: dict[str, Any]):
+        self.state = copy.deepcopy(state)
+        super().__init__(state["error"])
+
+
 class ExportFailed(ValueError):
     def __init__(self, result: Any, formats: list[str]):
         super().__init__(f"Images downloaded but requested exports are missing: {', '.join(formats)}; see task log")
@@ -158,18 +166,19 @@ class DownloadTasks:
             "log_path": str(self.service.task_log_dir / f"{task_id}.log"),
             "error": None,
         }
-        # Freeze configuration at submission, including runtime-only overrides.
-        option = self.service.option.copy_option()
-        for field in ("download", "client", "plugins"):
-            original = getattr(option, field)
-            setattr(option, field, type(original)(copy.deepcopy(original.src_dict)))
-        # The downloader's sequential fast path also reads these fields. Updating
-        # only Runtime would leave an original threading=1 setting serial even
-        # when this task explicitly requests more workers.
-        option.download.threading.photo = plan["photo_workers"]
-        option.download.threading.image = plan["image_workers"]
-        held_lease = lease or self.store.acquire(task_id)
+        held_lease = lease
         try:
+            held_lease = held_lease or self.store.acquire(task_id)
+            # Freeze configuration at submission, including runtime-only overrides.
+            option = self.service.option.copy_option()
+            for field in ("download", "client", "plugins"):
+                original = getattr(option, field)
+                setattr(option, field, type(original)(copy.deepcopy(original.src_dict)))
+            # The downloader's sequential fast path also reads these fields. Updating
+            # only Runtime would leave an original threading=1 setting serial even
+            # when this task explicitly requests more workers.
+            option.download.threading.photo = plan["photo_workers"]
+            option.download.threading.image = plan["image_workers"]
             self._save(state)
             self.jobs[task_id] = state
             self.controls[task_id] = DownloadControl()
@@ -178,8 +187,28 @@ class DownloadTasks:
                 self.controls[task_id].cancel("Cancelled by external request before startup")
                 state["status"] = "cancelling"
             self.runners[task_id] = asyncio.create_task(self._run(state, option, ctx))
-        except BaseException:
-            held_lease.close()
+        except BaseException as error:
+            state.update(
+                status="cancelled" if isinstance(error, DownloadCancelledException) else "failed",
+                error=str(error), finished_at=utc_now(),
+            )
+            for progress in state["progress"].values():
+                progress["status"] = "unfinished"
+            state["items"] = [{"id": jm_id, "status": "unfinished", "error": str(error)} for jm_id in plan["ids"]]
+            self.controls.pop(task_id, None)
+            self.leases.pop(task_id, None)
+            if held_lease is not None:
+                self.jobs[task_id] = state
+                try:
+                    self._save(state)
+                except OSError as report_error:
+                    state["report_error"] = str(report_error)
+                finally:
+                    held_lease.close()
+            else:
+                state["report_error"] = "Task report was not written: execution ownership could not be acquired"
+            if isinstance(error, Exception) and not isinstance(error, DownloadCancelledException):
+                raise DownloadStartError(state) from error
             raise
         if self.on_started is not None:
             try:
@@ -339,14 +368,17 @@ class DownloadTasks:
                                     missing.append(fmt)
                             if missing:
                                 raise ExportFailed(item, missing)
+                            metadata = _serialize_download_result(item)
                             with self.lock:
+                                succeeded[jm_id] = item
                                 state["progress"][jm_id].update(status="success", title=str(item.detail.name))
                                 completed = {entry["id"]: entry for entry in state["items"]}
                                 completed[jm_id] = {
                                     "id": jm_id,
                                     "status": "success",
                                     "title": str(item.detail.name),
-                                    **_serialize_download_result(item),
+                                    "actual_id": str(item.detail.id),
+                                    **metadata,
                                 }
                                 state["items"] = [completed[jmid] for jmid in plan["ids"] if jmid in completed]
                                 state["unfinished_ids"] = [jmid for jmid in plan["ids"] if jmid not in completed]
@@ -372,10 +404,8 @@ class DownloadTasks:
                             control=control,
                             extra=[EXPORTS[fmt] for fmt in plan["export_formats"]],
                         )
-                        succeeded = {str(item.detail.id): item for item in result}
                         failed.update(result.failed)
-                    except DownloadCancelledException as error:
-                        succeeded = {str(item.detail.id): item for item in error.completed_results}
+                    except DownloadCancelledException:
                         cancelled = True
             except Exception as error:
                 state["error"] = str(error)
@@ -389,6 +419,7 @@ class DownloadTasks:
                             "id": jm_id,
                             "status": "success",
                             "title": str(item.detail.name),
+                            "actual_id": str(item.detail.id),
                             **_serialize_download_result(item),
                         }
                     )
@@ -400,6 +431,7 @@ class DownloadTasks:
                     }
                     item_error = failed.get(jm_id)
                     if isinstance(item_error, ExportFailed):
+                        failure["actual_id"] = str(item_error.result.detail.id)
                         failure.update(_serialize_download_result(item_error.result))
                         failure["missing_exports"] = item_error.formats
                     items.append(failure)

@@ -59,7 +59,7 @@ def _start_download_stdio_server(root: str):
         if jm_id == "2":
             raise ValueError("controlled failure")
         return SimpleNamespace(
-            detail=SimpleNamespace(id=jm_id, name="Example", save_path=path),
+            detail=SimpleNamespace(id="9001" if jm_id == "7" else jm_id, name="Example", save_path=path),
             duration=0.01,
             manifest=SimpleNamespace(image_filepath_list=[], export_filepath_dict={}),
         )
@@ -116,6 +116,102 @@ class TestDownloadTasks(unittest.IsolatedAsyncioTestCase):
             duration=0.1,
             manifest=SimpleNamespace(image_filepath_list=[str(image)], export_filepath_dict={}),
         )
+
+    async def test_allocated_startup_failures_keep_identity_and_release_ownership(self):
+        manager = self.service._downloads
+        for method in (self.service.start_download, self.service.download_batch):
+            for operation in ("acquire", "save", "cancel_requested"):
+                with self.subTest(method=method.__name__, operation=operation):
+                    with patch.object(manager.store, operation, side_effect=PermissionError("Controlled storage failure")):
+                        report = await method(["1"])
+                    self.assertEqual("failed", report["status"])
+                    self.assertTrue(report["task_id"].startswith("batch-"))
+                    for field in ("log_path", "report_path"):
+                        self.assertTrue(Path(report[field]).is_absolute())
+                    self.assertEqual(["1"], report["unfinished_ids"])
+                    self.assertEqual("Controlled storage failure", report["error"])
+                    self.assertTrue(report["finished_at"])
+                    self.assertNotIn(report["task_id"], manager.runners)
+                    self.assertNotIn(report["task_id"], manager.controls)
+                    self.assertNotIn(report["task_id"], manager.leases)
+                    self.assertFalse(manager.store.owner_alive(report["task_id"]))
+                    if operation == "cancel_requested":
+                        self.assertEqual("failed", manager.store.read(report["task_id"])["status"])
+                    else:
+                        self.assertTrue(report["report_error"])
+                    if operation != "acquire":
+                        self.assertEqual("failed", manager.get(report["task_id"])["status"])
+        for method in (self.service.start_download, self.service.download_batch):
+            result = await method(["invalid"])
+            self.assertEqual("error", result["status"])
+            self.assertNotIn("task_id", result)
+
+    async def test_foreground_retry_returns_startup_failure_without_waiting_for_missing_runner(self):
+        from jmcomic_ai.download_cli import run_download
+
+        with patch.object(JmOption, "download_album", side_effect=ValueError("Controlled item failure")):
+            previous = await self.service.download_batch(["1"])
+        manager = self.service._downloads
+        with (
+            patch.object(manager.store, "cancel_requested", side_effect=PermissionError("Controlled storage failure")),
+            patch.object(manager, "wait", new_callable=AsyncMock) as wait,
+        ):
+            report = await run_download(self.service, SimpleNamespace(retry=previous["task_id"]), [], "album")
+        wait.assert_not_awaited()
+        self.assertEqual("failed", report["status"])
+        self.assertNotEqual(previous["task_id"], report["task_id"])
+        self.assertEqual("failed", manager.store.read(report["task_id"])["status"])
+
+    async def test_requested_ids_remain_completed_when_upstream_ids_differ(self):
+        for kind in ("album", "photo"):
+            with self.subTest(kind=kind):
+                def download(_option, jm_id, **kwargs):
+                    result = self.result(jm_id)
+                    result.detail.id = "9001"
+                    return result
+
+                with patch.object(JmOption, "download_" + kind, download):
+                    report = await self.service.download_batch(["1"], kind=kind)
+                self.assertEqual("success", report["status"])
+                self.assertEqual([], report["unfinished_ids"])
+                self.assertEqual("1", report["items"][0]["id"])
+                self.assertEqual("9001", report["items"][0]["actual_id"])
+                self.assertEqual("success", report["progress"]["1"]["status"])
+
+    async def test_cancel_and_retry_exclude_completed_requested_id_after_mapping(self):
+        calls = []
+        release = False
+
+        def download(_option, jm_id, **kwargs):
+            calls.append(jm_id)
+            if jm_id == "2" and not release:
+                while not JTC.is_cancelled():
+                    time.sleep(0.005)
+                JTC.raise_if_cancelled()
+            result = self.result(jm_id)
+            result.detail.id = "900" + jm_id
+            return result
+
+        with patch.object(JmOption, "download_album", download):
+            started = await self.service.start_download(["1", "2"], album_workers=1)
+            for _ in range(300):
+                if "2" in calls:
+                    break
+                await asyncio.sleep(0.01)
+            self.assertIn("2", calls)
+            self.service.cancel_download(started["task_id"])
+            cancelled = await self.service._downloads.wait(started["task_id"])
+            self.assertEqual("cancelled", cancelled["status"])
+            self.assertEqual(["2"], cancelled["unfinished_ids"])
+            self.assertEqual("success", cancelled["items"][0]["status"])
+            self.assertEqual("9001", cancelled["items"][0]["actual_id"])
+            release = True
+            retry = await self.service.retry_download(started["task_id"])
+            completed = await self.service._downloads.wait(retry["task_id"])
+        self.assertEqual(["1", "2", "2"], calls)
+        self.assertEqual("success", completed["status"])
+        self.assertEqual(["2"], completed["plan"]["ids"])
+        self.assertEqual("9002", completed["items"][0]["actual_id"])
 
     async def test_plan_offline_dedup_validation_and_no_config_mutation(self):
         before = self.service.option.deconstruct()
@@ -490,6 +586,10 @@ class TestDownloadTasks(unittest.IsolatedAsyncioTestCase):
 
                 plan = await call("plan_download", {"ids": ["001", "1", "2"]})
                 self.assertEqual(["1", "2"], plan["ids"])
+                mapped = await call("download_batch", {"ids": ["7"]})
+                self.assertEqual("success", mapped["status"])
+                self.assertEqual("7", mapped["items"][0]["id"])
+                self.assertEqual("9001", mapped["items"][0]["actual_id"])
                 result = await call("download_batch", {"ids": ["1", "2"]})
                 self.assertEqual("partial", result["status"])
                 retry = await call("retry_download", {"task_id": result["task_id"]})

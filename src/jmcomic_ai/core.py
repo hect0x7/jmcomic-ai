@@ -37,6 +37,8 @@ from jmcomic import (
     jm_task_context,
 )
 
+from jmcomic_ai.downloads import DownloadStartError
+
 ENV_OPTION_PATH = "JM_OPTION_PATH"
 ENV_LOG_PATH = "JM_LOG_PATH"
 ENV_TASK_LOG_DIR = "JM_TASK_LOG_DIR"
@@ -860,12 +862,15 @@ class JmcomicService:
         不修改配置、不做隐藏截断；所有参数均为正整数，命名沿用 jmcomic JmSyncRuntime。
         全批共享图片/章节线程池；每个服务最多四批。export_formats 支持 zip/pdf/long_img，
         下载时直接生成并返回真实产物路径，无需二次 post_process，不修改持久配置。
+        items 的 id 是请求编号，actual_id 是上游实际编号；不同时向用户说明两者。
         随后用 get_download_task 查询，用 cancel_download 协作取消。任务由当前服务器持有，
         关闭服务器会中断；报告可跨重启读取和重试。仅有 Skill/CLI 时用 jmai download --background。
         """
         try:
             plan = self._downloads.plan(ids, kind, album_workers, photo_workers, image_workers, export_formats)
             return self._downloads.start(plan)
+        except DownloadStartError as error:
+            return error.state
         except (ValueError, TypeError, OSError) as error:
             return {"status": "error", "error": str(error)}
 
@@ -928,6 +933,7 @@ class JmcomicService:
         photo_workers=全批章节数，image_workers=全批图片数；后两项默认沿用 download.threading.photo/image。
         返回与 get_download_task 相同的结构：保序去重 items、unfinished_ids、failed_ids、
         真实图片/导出路径、task_id/log_path/report_path。部分失败返回 partial，全部失败 failed。
+        items 的 id 保留请求编号，actual_id 是上游实际本子/章节编号；不同时向用户说明两者。
         适合短批次；需要提前拿到 task_id、轮询及主动取消时使用 start_download。
         MCP Context 自动注入，用于实时进度通知；调用方断开时协作取消并等待工作线程退出。
         """
@@ -935,6 +941,8 @@ class JmcomicService:
             plan = self._downloads.plan(ids, kind, album_workers, photo_workers, image_workers, export_formats)
             state = self._downloads.start(plan, ctx)
             return await self._downloads.wait(state["task_id"])
+        except DownloadStartError as error:
+            return error.state
         except (ValueError, TypeError, OSError) as error:
             return {"status": "error", "error": str(error)}
 

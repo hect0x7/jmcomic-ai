@@ -62,6 +62,11 @@ launcher `status=error` is not the task's terminal state. Startup timeout reques
 if initialization has not finished. If `cancellation_requested=false`, the control request could not
 be stored; retry cancellation after storage recovers and query until the task has ended.
 
+Allocated in-process tasks that fail during startup return `failed` with their task ID and absolute
+report/log paths. The execution lease is released and a failed report is saved where possible.
+`report_error` means the report could not be saved; retain the returned failure details.
+Validation failures before task allocation return `error` without a task ID.
+
 ## Worker limits and exports
 
 | CLI flag | MCP argument | Scope and default |
@@ -85,7 +90,9 @@ can remove source images.
 Task results contain per-ID `progress`, `completed_images`, ordered `items`, `failed_ids` and
 `unfinished_ids`. `completed_images` includes cache hits. Use the final report after the task ends
 for handoff; use each successful item's `image_paths` and `export_files` instead of predicting paths
-or rescanning the configured directory. Report partial failures and cancellations accurately.
+or rescanning the configured directory. Each successful item keeps the requested `id` and includes
+`actual_id`, the upstream album/chapter ID. If these differ, tell the user both IDs when reporting
+completion; retry eligibility always follows the requested ID. Report partial failures and cancellations accurately.
 
 Foreground downloads exit 0 on complete success, 1 on task/business errors, 2 on CLI usage errors,
 and 130 on Ctrl+C. With `--json`, normal results and business errors are one JSON document on stdout;

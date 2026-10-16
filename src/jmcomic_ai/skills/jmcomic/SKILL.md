@@ -30,7 +30,8 @@ Use `jmai download --ids 123,456 --json` for albums; add `--kind photo` for chap
 For work that must continue after the command returns, add `--background`; use `jmai task status`,
 `cancel`, or `retry` with the returned task ID. Retain the task directory when using these commands.
 Wait for cancellation to reach a terminal state before retrying. Retry only unfinished items, and
-report partial or failed results accurately. Hand off the returned file paths rather than guessing them.
+report partial or failed results accurately. If an item’s `actual_id` differs from its requested `id`,
+mention both IDs to the user. Hand off the returned file paths rather than guessing them.
 
 Read [references/download_workflows.md](references/download_workflows.md) when choosing chapters,
 setting worker limits, exporting, or managing tasks. It also describes the MCP task tools for MCP clients.

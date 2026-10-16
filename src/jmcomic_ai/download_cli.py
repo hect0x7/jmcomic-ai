@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from jmcomic_ai.task_store import TERMINAL
+
 if TYPE_CHECKING:
     from jmcomic_ai.core import JmcomicService
 
@@ -31,7 +33,7 @@ async def run_download(service: "JmcomicService", args: Any, ids: list[str], kin
     retry = getattr(args, "retry", None)
     if retry:
         result = await service.retry_download(retry)
-        if result.get("status") == "error":
+        if result.get("status") == "error" or result.get("status") in TERMINAL:
             return result
         task_id = result["task_id"]
         try:
@@ -60,15 +62,19 @@ def print_result(result: dict[str, Any], as_json: bool = False) -> None:
             print(f"Progress: {result.get('completed_images', 0)} images processed")
             for item in result["items"]:
                 print(f"  {item['id']}: {item['status']} {item.get('download_path', item.get('error') or '')}")
+                if item.get("actual_id") and item["actual_id"] != item["id"]:
+                    print(f"    Upstream {result['plan']['kind']} ID: {item['actual_id']}")
                 for suffix, paths in item.get("export_files", {}).items():
                     for path in paths:
                         print(f"    {suffix}: {path}")
-            if result["unfinished_ids"]:
+            if result["unfinished_ids"] and not result.get("report_error"):
                 print(f"Retry: jmai task retry {result['task_id']} (use the same --task-dir)")
         elif "details" in result or result["status"] == "success":
             print(json.dumps(result, ensure_ascii=False, indent=2))
         if result.get("error"):
             print(result["error"])
+        if result.get("report_error"):
+            print(f"Task report could not be saved: {result['report_error']}")
 
 
 def add_download_arguments(parser: Any) -> None:

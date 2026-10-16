@@ -275,6 +275,12 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "login",
                 "update_option",
                 "post_process",
+                "plan_download",
+                "download_batch",
+                "start_download",
+                "get_download_task",
+                "cancel_download",
+                "retry_download",
             ]
 
             for name in expected:
