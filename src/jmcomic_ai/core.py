@@ -16,6 +16,7 @@ except ImportError:
     Context = Any  # type: ignore
 
 from jmcomic import (
+    DownloadCancelledException,
     JmAlbumComment,
     JmAlbumCommentPage,
     JmAlbumDetail,
@@ -35,6 +36,8 @@ from jmcomic import (
     jm_logger,
     jm_task_context,
 )
+
+from jmcomic_ai.downloads import DownloadStartError
 
 ENV_OPTION_PATH = "JM_OPTION_PATH"
 ENV_LOG_PATH = "JM_LOG_PATH"
@@ -375,8 +378,11 @@ class JmcomicService:
             Path(task_log_dir or os.getenv(ENV_TASK_LOG_DIR) or DEFAULT_TASK_LOG_DIR).expanduser().resolve()
         )
         self.option = self._load_option()
-        self.client = self.option.build_jm_client()
+        self._client: JmcomicClient | None = None
         self._ensure_init()
+        from jmcomic_ai.downloads import DownloadTasks
+
+        self._downloads = DownloadTasks(self)
 
     def _load_option(self) -> JmOption:
         self.logger.info(f"Loading jmcomic option from: {self.option_path}")
@@ -389,13 +395,34 @@ class JmcomicService:
             self.logger.info("Default option generated and loaded.")
             return default_option
 
-        option = create_option_by_file(str(self.option_path))
+        try:
+            option = create_option_by_file(str(self.option_path))
+        except DownloadCancelledException:
+            raise
+        except Exception as error:
+            # Configuration parsing and initialization are separate from download
+            # execution. Expose a stable CLI/MCP error without copying YAML
+            # snippets (which can contain credentials) into results or logs.
+            error_type = type(error).__name__
+            self.logger.warning("Could not load option (%s)", error_type)
+            raise ValueError(f"Could not load option file ({error_type}); check its format and settings") from error
         self.logger.info("Option loaded successfully.")
         return option
 
     def _ensure_init(self):
         """Ensure necessary initialization"""
         pass
+
+    @property
+    def client(self) -> JmcomicClient:
+        """Build the network client on first use, avoiding eager client setup (initialization plugins retain their own behavior)."""
+        if self._client is None:
+            self._client = self.option.build_jm_client()
+        return self._client
+
+    @client.setter
+    def client(self, value: JmcomicClient | None) -> None:
+        self._client = value
 
     def _setup_logging(self, log_path: str | None = None):
         """Route jmcomic and jmcomic_ai logs to one global file only."""
@@ -408,14 +435,15 @@ class JmcomicService:
         self.logger.info(f"Logging initialized: path={self.log_path}")
 
     @contextmanager
-    def _download_task_log(self, tool_name: str, jm_id: str) -> Iterator[tuple[str, Path]]:
+    def _download_task_log(self, tool_name: str, jm_id: str, task_id: str | None = None) -> Iterator[tuple[str, Path]]:
         """Create and route logs for one MCP download tool invocation."""
         safe_jm_id = "".join(char for char in str(jm_id) if char.isalnum() or char in "-_")[:48] or "unknown"
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        task_id = f"{tool_name}-{safe_jm_id}-{uuid4().hex[:8]}"
+        filename = f"{task_id}.log" if task_id else None
+        task_id = task_id or f"{tool_name}-{safe_jm_id}-{uuid4().hex[:8]}"
 
         self.task_log_dir.mkdir(parents=True, exist_ok=True)
-        log_path = self.task_log_dir / f"{timestamp}-{task_id}.log"
+        log_path = self.task_log_dir / (filename or f"{timestamp}-{task_id}.log")
         handler = logging.FileHandler(log_path, encoding="utf-8")
         handler.addFilter(_TaskLogFilter(task_id))
         handler.setFormatter(
@@ -444,7 +472,7 @@ class JmcomicService:
         [not a tool]
         """
         self.option = self._load_option()
-        self.client = self.option.build_jm_client()
+        self.client = None
 
     def update_option(self, option_updates: dict[str, Any]) -> str:
         """
@@ -532,11 +560,18 @@ class JmcomicService:
             "title": str(album.name),
             "author": str(album.author),
             "likes": album.likes,
+            "is_favorite": album.is_favorite,
+            "liked": album.liked,
             "views": album.views,
             "tags": album.tags,
             "actors": album.actors,
             "description": str(album.description),
             "chapter_count": len(album),
+            "page_count": album.page_count,
+            "publish_time": str(album.pub_date),
+            "chapters": [
+                {"id": str(pid), "index": int(index), "title": str(title)} for pid, index, title in album.episode_list
+            ],
             "update_time": str(album.update_date),
             "cover_url": JmcomicText.get_album_cover_url(album.album_id),
         }
@@ -764,6 +799,152 @@ class JmcomicService:
         )
 
         return self._parse_search_page(search_page)
+
+    async def plan_download(
+        self,
+        ids: list[str],
+        kind: str = "album",
+        album_workers: int | None = None,
+        photo_workers: int | None = None,
+        image_workers: int | None = None,
+        export_formats: list[str] | None = None,
+        include_details: bool = False,
+    ) -> dict[str, Any]:
+        """下载前预览：规范化/去重 ID、输出根目录和全批并发上限，不下载图片。
+
+        kind 为 album 或 photo；export_formats 可选 zip/pdf/long_img。
+        album_workers 仅限制本子数（默认3）；photo_workers 限制全批章节数，image_workers 限制全批图片数，
+        后两项默认沿用 download.threading.photo/image。参数沿用 jmcomic JmSyncRuntime 命名。
+        默认不请求漫画元数据或图片；配置的初始化插件仍按自身行为运行。include_details=True 联网读取标题、页数及章节 ID，便于选择部分章节，
+        单项失败记入 details，不中断其它项。目录仅为根目录，不估算文件大小或下载耗时。
+        PDF 缺少 img2pdf 时返回可操作错误，不自动安装依赖。
+        """
+        try:
+            plan = self._downloads.plan(ids, kind, album_workers, photo_workers, image_workers, export_formats)
+            details = []
+            if include_details:
+                semaphore = asyncio.Semaphore(plan["album_workers"] if kind == "album" else plan["photo_workers"])
+
+                async def fetch(jm_id):
+                    async with semaphore:
+                        try:
+                            if kind == "album":
+                                detail = await asyncio.to_thread(self.get_album_detail, jm_id)
+                            else:
+                                photo = await asyncio.to_thread(self.get_client().get_photo_detail, jm_id)
+                                detail = {"id": jm_id, "title": str(photo.name), "page_count": len(photo)}
+                            return {"status": "success", **detail}
+                        except Exception as error:
+                            return {"id": jm_id, "status": "failed", "error": str(error)}
+
+                details = await asyncio.gather(*(fetch(jm_id) for jm_id in plan["ids"]))
+            failed_count = sum(detail["status"] == "failed" for detail in details)
+            status = "success" if not failed_count else "failed" if failed_count == len(details) else "partial"
+            return {"status": status, **plan, "details": details, "network_requested": include_details}
+        except (ValueError, TypeError) as error:
+            return {"status": "error", "error": str(error)}
+
+    async def start_download(
+        self,
+        ids: list[str],
+        kind: str = "album",
+        album_workers: int | None = None,
+        photo_workers: int | None = None,
+        image_workers: int | None = None,
+        export_formats: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """立即启动后台批量下载并返回 task_id、log_path、report_path。
+
+        ID/链接按首次出现顺序去重，kind=album/photo。
+        album_workers 限制全批同时下载的本子数，默认3，仅适用 kind=album；
+        photo_workers 限制全批同时下载的章节数（也控制 kind=photo 批次）；
+        image_workers 限制全批同时下载的图片数。后两项默认沿用 download.threading.photo/image，
+        不修改配置、不做隐藏截断；所有参数均为正整数，命名沿用 jmcomic JmSyncRuntime。
+        全批共享图片/章节线程池；每个服务最多四批。export_formats 支持 zip/pdf/long_img，
+        下载时直接生成并返回真实产物路径，无需二次 post_process，不修改持久配置。
+        items 的 id 是请求编号，actual_id 是上游实际编号；不同时向用户说明两者。
+        随后用 get_download_task 查询，用 cancel_download 协作取消。任务由当前服务器持有，
+        关闭服务器会中断；报告可跨重启读取和重试。仅有 Skill/CLI 时用 jmai download --background。
+        """
+        try:
+            plan = self._downloads.plan(ids, kind, album_workers, photo_workers, image_workers, export_formats)
+            return self._downloads.start(plan)
+        except DownloadStartError as error:
+            return error.state
+        except (ValueError, TypeError, OSError) as error:
+            return {"status": "error", "error": str(error)}
+
+    def get_download_task(self, task_id: str) -> dict[str, Any]:
+        """查询后台下载状态、已处理图片数及最终保序清单，或读取跨重启的任务报告。
+
+        状态 queued/running/cancel_requested/cancelling 为进行中，success/partial/failed/cancelled/interrupted 为终态。
+        items 的 success 表示整项完成；unfinished_ids 可用于 retry_download。
+        completed_images 包括缓存命中，不等于网络传输数。结果清单在整批收尾后确定。
+        """
+        try:
+            return self._downloads.get(task_id)
+        except (ValueError, OSError) as error:
+            return {"status": "error", "error": str(error)}
+
+    def cancel_download(self, task_id: str) -> dict[str, Any]:
+        """请求协作式取消共享任务目录中的后台下载，重复取消安全。
+
+        返回 cancel_requested/cancelling 表示已发信号，必须继续查询到终态；进行中的 HTTP 请求会先结束。
+        不删除已下载文件，最终结果保留完成项及 unfinished_ids，可用 retry_download 续下。
+        """
+        try:
+            return self._downloads.cancel(task_id)
+        except (ValueError, OSError) as error:
+            return {"status": "error", "error": str(error)}
+
+    async def retry_download(self, task_id: str) -> dict[str, Any]:
+        """按原顺序为终态任务的未完成项创建新后台任务，保留原报告和任务 ID。
+
+        沿用原下载种类、并发和导出格式；采用当前配置/账户，已有图片由上游缓存复用。
+        不重复下载原任务已完成的本子；无未完成项或仍运行时返回 error。
+        """
+        try:
+            previous = self._downloads.get(task_id)
+            from jmcomic_ai.downloads import TERMINAL
+
+            if previous["status"] not in TERMINAL or not previous["unfinished_ids"]:
+                raise ValueError("Only a finished task with unfinished IDs can be retried")
+            from jmcomic_ai.task_store import retry_parameters
+
+            parameters = retry_parameters(previous)
+            ids = parameters.pop("ids")
+            return await self.start_download(ids, **parameters)
+        except (ValueError, OSError) as error:
+            return {"status": "error", "error": str(error)}
+
+    async def download_batch(
+        self,
+        ids: list[str],
+        kind: str = "album",
+        album_workers: int | None = None,
+        photo_workers: int | None = None,
+        image_workers: int | None = None,
+        export_formats: list[str] | None = None,
+        ctx: Context | None = None,
+    ) -> dict[str, Any]:
+        """有界批量下载并等待整批结果，支持 album/photo 和 zip/pdf/long_img 导出。
+
+        并发参数沿用 jmcomic JmSyncRuntime：album_workers=同时下载本子数（默认3，kind=album专用），
+        photo_workers=全批章节数，image_workers=全批图片数；后两项默认沿用 download.threading.photo/image。
+        返回与 get_download_task 相同的结构：保序去重 items、unfinished_ids、failed_ids、
+        真实图片/导出路径、task_id/log_path/report_path。部分失败返回 partial，全部失败 failed。
+        items 的 id 保留请求编号，actual_id 是上游实际本子/章节编号；不同时向用户说明两者。
+        适合短批次；需要提前拿到 task_id、轮询及主动取消时使用 start_download。
+        MCP Context 自动注入，用于实时进度通知；调用方断开时协作取消并等待工作线程退出。
+        """
+        try:
+            plan = self._downloads.plan(ids, kind, album_workers, photo_workers, image_workers, export_formats)
+            state = self._downloads.start(plan, ctx)
+            return await self._downloads.wait(state["task_id"])
+        except DownloadStartError as error:
+            return error.state
+        except (ValueError, TypeError, OSError) as error:
+            return {"status": "error", "error": str(error)}
 
     async def download_album(self, album_id: str, ctx: Context | None = None) -> dict[str, Any]:
         """

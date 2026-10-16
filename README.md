@@ -51,16 +51,17 @@
 |:---|:---|
 | 🔍 **搜索与发现** | 关键词搜索、作者/标签/角色筛选、分类浏览、排行榜查询、本子详情 |
 | 💬 **评论** | 分页查看评论、递归回复与剧透标记 |
-| 📥 **下载** | 整本下载、单章下载、封面下载、批量下载、实时进度追踪 |
+| 📥 **下载** | 整本/单章/封面下载、批量下载、下载前预览、章节选择和分层并发控制 |
+| ⏯️ **任务控制** | 后台启动、逐项进度、协作取消、只重试未完成项、跨重启读取任务报告 |
 | 🧾 **任务追踪** | 下载返回任务 ID 与专属日志路径，运行日志仅写入文件 |
-| 📦 **后处理** | 生成 ZIP、PDF 或长图，支持整本级与章节级处理 |
+| 📦 **后处理** | 下载时直接生成 ZIP、PDF 或长图，也可单独转换已下载内容 |
 | 📊 **数据整理** | 搜索结果导出 CSV/JSON、排行榜快照与变化追踪 |
 | ⚙️ **配置与账户** | 动态修改下载配置、配置校验与格式转换、账户登录与 Cookie 持久化 |
 | 🩺 **诊断** | 检查运行环境、配置文件、网络与域名可用性 |
 | 📱 **APK 获取** | 从 `hect0x7/JMComic-APK` 的最新 GitHub Release 下载安卓安装包 |
 | 📖 **本地阅读** | Agent 直接调用可选依赖 `jm-view-server` 提供的 `jms`，用电脑或手机浏览器阅读已下载内容 |
 | 🧠 **Skills + CLI** | 技能手册、18 个配套脚本，以及 `jmai` / `jmcomic-ai` 命令行入口 |
-| 🔌 **MCP** | 10 个工具、3 个知识资源，支持 stdio、SSE 与 HTTP 传输 |
+| 🔌 **MCP** | 21 个工具、3 个知识资源，支持 stdio、SSE 与 HTTP 传输 |
 
 ---
 
@@ -141,6 +142,7 @@ skills/jmcomic/
 ├── 📂 references/                  # 深度参考文档（按需加载，节省 token）
 │   ├── reference.md                # 配置完整参考
 │   ├── browse_albums.md            # browse_albums 工具详解
+│   ├── download_workflows.md       # 下载计划、导出、取消和重试
 │   ├── post_process.md             # 后处理 dir_rule DSL 详解
 │   ├── ecosystem.md                # APK 获取、本地阅读与下载后承接流程
 │   ├── scripts.md                  # 脚本的完整使用手册
@@ -207,6 +209,12 @@ skills/jmcomic/
 | `download_album` | 下载整本漫画 | ⚡ 异步执行 · 📊 实时进度上报 · 返回实际图片、导出文件、耗时及任务日志 |
 | `download_photo` | 下载单个章节 | ⚡ 异步执行 · 📊 实时进度上报 · 返回实际图片、导出文件、耗时及任务日志 |
 | `download_cover` | 下载封面图片 | 默认保存至 `covers/`，可用 `output_dir` 指定目录 |
+| `plan_download` | 下载前计划 | 校验 ID、并发与导出格式；可选请求标题和章节信息 |
+| `download_batch` | 等待批量下载完成 | 等待整批完成，返回逐项结果、图片及导出文件路径 |
+| `start_download` | 启动 MCP 后台任务 | 立即返回 task_id，由当前 MCP 服务持有 |
+| `get_download_task` | 查询下载任务 | 逐项进度、整体状态及持久化报告 |
+| `cancel_download` | 协作取消 | 请求后需查询到终态；保留完成项和未完成列表 |
+| `retry_download` | 重试未完成项 | 为终态任务创建新任务，保留旧报告 |
 
 ### 后处理
 
@@ -391,6 +399,18 @@ JMComic AI 提供了两条独立路线，**选择其中一条**即可：
 ---
 
 ### 🔧 常用命令参考
+
+*   **下载与任务**：
+    ```bash
+    jmai download --ids 123,456 --export zip --json  # 下载并生成 ZIP
+    jmai download --ids 123,456 --background --json  # 后台下载，返回 task_id
+    jmai task status <task_id> --json                # 查询进度与结果
+    jmai task cancel <task_id> --json                # 请求取消
+    jmai task retry <task_id> --json                 # 原任务结束后，只重试未完成项
+    ```
+    将 `<task_id>` 替换为启动命令返回的 ID；取消后继续查询，待任务结束且仍有未完成项时再重试。
+    `--album-workers`、`--photo-workers`、`--image-workers` 分别限制本子、章节和图片并发。
+    章节选择、导出格式及任务恢复详见[下载与任务参考](src/jmcomic_ai/skills/jmcomic/references/download_workflows.md)。
 
 *   **MCP 服务管理**:
     ```bash

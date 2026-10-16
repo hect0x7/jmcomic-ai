@@ -87,7 +87,7 @@ def print_config_summary(option: JmOption):
     # Download settings
     print("\n📥 Download:")
     threading = option.download.get('threading', {})
-    print(f"  - Image threads: {threading.get('image', 30)}")
+    print(f"  - Image threads: {threading.get('image', 20)}")
     print(f"  - Photo threads: {threading.get('photo', 5)}")
 
     # Directory settings

@@ -64,7 +64,7 @@ Download behavior settings.
   - **`suffix`**: String or null, force image format (e.g., `.jpg`, `.png`)
 
 - **`threading`**: Concurrency settings
-  - **`image`**: Integer, max concurrent image downloads (default: 30, max: 50)
+  - **`image`**: Integer, max concurrent image downloads (positive integer, default: 20)
   - **`photo`**: Integer, max concurrent chapter downloads (default: CPU thread count)
 
 ### Example
@@ -76,7 +76,7 @@ download:
     decode: true
     suffix: .jpg
   threading:
-    image: 30
+    image: 20
     photo: 16
 ```
 
@@ -320,7 +320,7 @@ download:
     decode: true
     suffix: .jpg
   threading:
-    image: 30
+    image: 20
     photo: 16
 
 client:

@@ -56,7 +56,10 @@ def _register_service_tools(mcp_server: FastMCP, service: JmcomicService):
     """动态注册 service 的所有公共方法为 MCP tools"""
 
     # 获取 JmcomicService 类的所有方法
-    for name, method in inspect.getmembers(service, predicate=inspect.ismethod):
+    # Inspect the class first: inspecting an instance evaluates properties and can
+    # initialize network clients before the first tool call.
+    for name, _ in inspect.getmembers(type(service), predicate=inspect.isfunction):
+        method = getattr(service, name)
         # 只处理公共业务方法
         if not _is_public_method(name, method):
             continue

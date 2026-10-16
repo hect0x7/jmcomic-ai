@@ -33,7 +33,7 @@ class TestSkillScriptExitCodes(unittest.TestCase):
     def test_batch_download_failure_exits_nonzero(self):
         args = SimpleNamespace(ids="1", file=None, option=None)
         service = Mock()
-        service.download_album = AsyncMock(return_value={"status": "failed", "error": "failed", "log_path": "log"})
+        service.download_batch = AsyncMock(return_value={"status": "failed", "error": "failed", "log_path": "log"})
         with (
             patch.object(batch_download, "parse_args", return_value=args),
             patch.object(batch_download, "JmcomicService", return_value=service),
@@ -45,7 +45,7 @@ class TestSkillScriptExitCodes(unittest.TestCase):
     def test_download_photo_failure_exits_nonzero(self):
         args = SimpleNamespace(ids="1", file=None, option=None)
         service = Mock()
-        service.download_photo = AsyncMock(return_value={"status": "failed", "error": "failed", "log_path": "log"})
+        service.download_batch = AsyncMock(return_value={"status": "failed", "error": "failed", "log_path": "log"})
         with (
             patch.object(download_photo, "parse_args", return_value=args),
             patch.object(download_photo, "JmcomicService", return_value=service),

@@ -190,10 +190,9 @@
                     "properties": {
                         "image": {
                             "type": "integer",
-                            "default": 30,
+                            "default": 20,
                             "minimum": 1,
-                            "maximum": 50,
-                            "description": "Max concurrent image downloads (JMComic web allows max 50)"
+                            "description": "Max concurrent image downloads (positive integer; default 20)"
                         },
                         "photo": {
                             "type": "integer",

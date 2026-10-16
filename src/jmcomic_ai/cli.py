@@ -354,6 +354,126 @@ def uninstall_skills(
 
 
 # Option group
+@app.command("download")
+def download_command(
+    ids: str | None = typer.Option(None, "--ids", help="Comma-separated IDs or links"),
+    file: Path | None = typer.Option(None, "--file", help="IDs file, one per line"),
+    kind: str = typer.Option("album", "--kind", help="album or photo (chapter)"),
+    album_workers: int | None = typer.Option(None, "--album-workers", min=1, help="Concurrent albums; album mode only (default: 3)"),
+    photo_workers: int | None = typer.Option(None, "--photo-workers", min=1, help="Concurrent chapters across the batch; defaults to download.threading.photo"),
+    image_workers: int | None = typer.Option(None, "--image-workers", min=1, help="Concurrent images across the batch; defaults to download.threading.image"),
+    export: str = typer.Option("", "--export", help="zip,pdf,long_img (comma-separated)"),
+    plan: bool = typer.Option(False, "--plan", help="Preview without downloading images"),
+    details: bool = typer.Option(False, "--details", help="With --plan, fetch metadata and chapter IDs"),
+    retry: str | None = typer.Option(None, "--retry", help="Retry unfinished IDs of a previous task"),
+    background: bool = typer.Option(False, "--background", help="Start a temporary worker; return task ID after readiness"),
+    task_dir: Path | None = typer.Option(None, "--task-dir", help="Task directory (default: JM_TASK_LOG_DIR or ~/.jmcomic-ai/logs)"),
+    json_output: bool = typer.Option(False, "--json", help="Emit one JSON result"),
+    option: Path | None = typer.Option(None, "--option", help="Configuration file; reports use JM_TASK_LOG_DIR"),
+):
+    """Download a bounded batch, export in one step, or retry a previous task. Ctrl+C cooperatively stops it."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from jmcomic_ai.download_cli import print_result, read_ids, run_download
+
+    if sum(bool(value) for value in (ids, file, retry)) != 1:
+        raise typer.BadParameter("Choose exactly one of --ids, --file, or --retry")
+    if details and not plan:
+        raise typer.BadParameter("--details requires --plan")
+    if background and plan:
+        raise typer.BadParameter("--background cannot be combined with --plan")
+    if retry and (plan or export or details or kind != "album" or any(value is not None for value in (album_workers, photo_workers, image_workers))):
+        raise typer.BadParameter("--retry uses the original kind, worker limits and exports; do not combine options")
+    try:
+        values = read_ids(ids, str(file) if file else None)
+        args = SimpleNamespace(
+            export=export, album_workers=album_workers, photo_workers=photo_workers, image_workers=image_workers,
+            plan=plan, details=details, retry=retry, json=json_output, background=background,
+            option=str(option) if option else None, task_dir=task_dir,
+        )
+        if background:
+            from jmcomic_ai.background import from_arguments
+
+            result = from_arguments(args, values, kind)
+        else:
+            from jmcomic_ai.task_store import TaskStore, execution_directory
+
+            selected_option = args.option
+            previous = TaskStore(task_dir).read(retry) if retry else {}
+            if selected_option is None:
+                selected_option = previous.get("option_path") or None
+            if selected_option:
+                selected_option = str(Path(selected_option).expanduser().resolve())
+            resolved_task_dir = str(TaskStore(task_dir).directory)
+            with execution_directory(previous.get("execution_cwd")):
+                service = JmcomicService(option_path=selected_option, task_log_dir=resolved_task_dir)
+                result = asyncio.run(run_download(service, args, values, kind))
+        print_result(result, json_output)
+        if result["status"] not in ({"queued", "running", "cancel_requested", "cancelling", "success"} if background else {"success"}):
+            raise typer.Exit(1)
+    except (OSError, ValueError) as error:
+        print_result({"status": "error", "error": str(error)}, json_output)
+        raise typer.Exit(1) from error
+    except KeyboardInterrupt:
+        typer.echo("Download interrupted; its report is in JM_TASK_LOG_DIR (default ~/.jmcomic-ai/logs).", err=True)
+        raise typer.Exit(130) from None
+
+
+# Queries and cancellation deliberately do not initialize JmcomicService or read option.yml.
+task_app = typer.Typer(name="task", help="Control local CLI/MCP download tasks without a running service", no_args_is_help=True)
+app.add_typer(task_app, name="task")
+
+
+@task_app.command("status")
+def task_status(
+    task_id: str = typer.Argument(..., help="Task ID returned by download"),
+    task_dir: Path | None = typer.Option(None, "--task-dir"),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Read a live or finished task, including results from another process."""
+    from jmcomic_ai.download_cli import print_result
+    from jmcomic_ai.task_store import TaskStore
+
+    try:
+        print_result(TaskStore(task_dir).read(task_id), json_output)
+    except (OSError, ValueError) as error:
+        print_result({"status": "error", "error": str(error)}, json_output)
+        raise typer.Exit(1) from error
+
+
+@task_app.command("cancel")
+def task_cancel(
+    task_id: str = typer.Argument(...),
+    task_dir: Path | None = typer.Option(None, "--task-dir"),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Request cooperative cancellation; poll status until terminal. Never force-kills a PID."""
+    from jmcomic_ai.download_cli import print_result
+    from jmcomic_ai.task_store import TaskStore
+
+    try:
+        print_result(TaskStore(task_dir).request_cancel(task_id), json_output)
+    except (OSError, ValueError) as error:
+        print_result({"status": "error", "error": str(error)}, json_output)
+        raise typer.Exit(1) from error
+
+
+@task_app.command("retry")
+def task_retry(
+    task_id: str = typer.Argument(...),
+    task_dir: Path | None = typer.Option(None, "--task-dir"),
+    option: Path | None = typer.Option(None, "--option", help="Override original option file"),
+    foreground: bool = typer.Option(False, "--foreground", help="Wait in this process; default launches a background worker"),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Create a new task for unfinished IDs. Original report is retained."""
+    # Reuse the main command's validation, configuration and result/exit contract.
+    download_command(ids=None, file=None, kind="album", album_workers=None, photo_workers=None,
+                     image_workers=None, export="", plan=False, details=False, retry=task_id,
+                     background=not foreground, task_dir=task_dir, json_output=json_output, option=option)
+
+
 option_app = typer.Typer(name="option", help="Manage jmcomic option (configuration)", no_args_is_help=True)
 app.add_typer(option_app, name="option")
 

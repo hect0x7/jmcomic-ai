@@ -24,51 +24,17 @@ Activate this skill when the user wants to:
 For APK download, local-reader startup, LAN safety, and download-to-read continuation rules, read
 `references/ecosystem.md` before acting.
 
-### 📥 Download Tools Return Structured Data
+### Downloads
 
-Both `download_album` and `download_photo` return structured dictionaries:
+Use `jmai download --ids 123,456 --json` for albums; add `--kind photo` for chapter IDs.
+For work that must continue after the command returns, add `--background`; use `jmai task status`,
+`cancel`, or `retry` with the returned task ID. Retain the task directory when using these commands.
+Wait for cancellation to reach a terminal state before retrying. Retry only unfinished items, and
+report partial or failed results accurately. If an item’s `actual_id` differs from its requested `id`,
+mention both IDs to the user. Hand off the returned file paths rather than guessing them.
 
-**`download_album(album_id: str, ctx: Context = None)`** returns:
-```python
-{
-    "status": "success" | "failed",
-    "album_id": str,
-    "title": str,
-    "download_path": str,  # Absolute path to download directory
-    "duration": float | None,  # Total elapsed time in seconds
-    "image_paths": list[str],  # Actual downloaded or cached image paths
-    "export_files": dict[str, list[str]],  # Plugin outputs grouped by suffix
-    "task_id": str,        # Dedicated ID for this download invocation
-    "log_path": str,       # Absolute path to this task's log file
-    "error": str | None
-}
-```
-
-**`download_photo(photo_id: str, ctx: Context = None)`** returns:
-```python
-{
-    "status": "success" | "failed",
-    "photo_id": str,
-    "image_count": int,    # Number of actual image paths in this result
-    "download_path": str,  # Absolute path to download directory
-    "duration": float | None,  # Total elapsed time in seconds
-    "image_paths": list[str],  # Actual downloaded or cached image paths
-    "export_files": dict[str, list[str]],  # Plugin outputs grouped by suffix
-    "task_id": str,        # Dedicated ID for this download invocation
-    "log_path": str,       # Absolute path to this task's log file
-    "error": str | None
-}
-```
-
-**Real-time Progress Tracking**: Both methods accept an optional `ctx: Context` parameter (automatically injected by FastMCP). When provided, progress updates are sent via MCP notifications in real-time, allowing AI agents to monitor download progress.
-
-**Persistent Task Logs**: Every download invocation creates an isolated log file and returns its `task_id` and `log_path`, including failed downloads. Logs default to `~/.jmcomic-ai/logs`; set `JM_TASK_LOG_DIR` to use another directory.
-
-**Artifact Handoff**: Use `image_paths` and `export_files` for packaging, sending, or cleanup instead of rescanning the configured directory. `download_path` comes from the completed upstream download result rather than a pre-download path prediction.
-
-**File-only Logging**: Regular `jmcomic`, `jmcomic_ai`, and MCP runtime logs share `~/.jmcomic-ai/jmcomic_ai.log` and are not emitted to stdout or stderr. Set `JM_LOG_PATH` to override the global log file. MCP protocol messages and explicit CLI result output are unaffected.
-
-**Upstream Rich Terminal Progress**: `jmcomic 2.7.7` includes the optional `download_progress` plugin with `log_file` and `terminal_log_lines`. Recommend it only when the user explicitly wants Rich progress in an interactive terminal. Do not enable it for `jmai` MCP/stdio downloads, which already use MCP Context notifications and isolated task logs.
+Read [references/download_workflows.md](references/download_workflows.md) when choosing chapters,
+setting worker limits, exporting, or managing tasks. It also describes the MCP task tools for MCP clients.
 
 ### Album Comments
 
@@ -228,7 +194,7 @@ dir_rule:
 # Adjust concurrency
 download:
   threading:
-    image: 30  # Max concurrent image downloads
+    image: 20  # Max concurrent image downloads
     photo: 5   # Max concurrent chapter downloads
 
 # Set proxy
@@ -306,8 +272,8 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `delete_favorite_album.py` | `delete_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
-| `batch_download.py` | `download_album` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
-| `download_photo.py` | `download_photo` | Partial | Batch wrapper over repeated calls; prints each result's download path and dedicated log path. |
+| `batch_download.py` | `plan_download` / `download_batch` / task lifecycle | High | Shared native batch engine; `--background` launches an independent CLI worker. Query/cancel/retry with `jmai task`. |
+| `download_photo.py` | `plan_download` / `download_batch` / task lifecycle | High | Same batch engine with chapter mode fixed; supports `--background`. |
 | `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
 | `download_latest_apk.py` | None | None | Reads the public `hect0x7/JMComic-APK` GitHub Release API directly. |
 | `login.py` | `login` | High | Supports `--username`, `--password`, `--impl`, `--domain`, `--proxy`, and `--save` to update option.yml. |
@@ -315,9 +281,9 @@ The following table clarifies how script CLI parameters map to MCP tools.
 
 ### Mapping Policy
 
-- **MCP tools are the source of truth** for agent-facing contracts (name, args, return structure).
-- **Scripts are operational helpers** for local package workflows and may expose different output formatting.
-- If strict schema guarantees are required, prefer calling MCP tools directly instead of scripts.
+- For Skills workflows, follow the CLI/script `--help` and JSON results; no MCP connection is required.
+- In an MCP client, follow the registered tool schemas. The mapping above describes related capabilities,
+  not a requirement to switch interfaces.
 
 ## Important Notes
 

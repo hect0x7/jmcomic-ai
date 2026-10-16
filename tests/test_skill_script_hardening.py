@@ -150,7 +150,7 @@ class TestCancellation(unittest.TestCase):
     def test_batch_download_propagates_cancellation(self):
         args = SimpleNamespace(ids="1", file=None, option=None)
         service = Mock()
-        service.download_album = AsyncMock(side_effect=asyncio.CancelledError)
+        service.download_batch = AsyncMock(side_effect=asyncio.CancelledError)
 
         with (
             patch.object(batch_download, "parse_args", return_value=args),
@@ -162,7 +162,7 @@ class TestCancellation(unittest.TestCase):
     def test_photo_download_propagates_cancellation(self):
         args = SimpleNamespace(ids="1", file=None, option=None)
         service = Mock()
-        service.download_photo = AsyncMock(side_effect=asyncio.CancelledError)
+        service.download_batch = AsyncMock(side_effect=asyncio.CancelledError)
 
         with (
             patch.object(download_photo, "parse_args", return_value=args),

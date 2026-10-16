@@ -26,7 +26,7 @@ download:
   image:
     decode: true
   threading:
-    image: 30
+    image: 20
     photo: 5
 ```
 
@@ -93,7 +93,7 @@ dir_rule:
 
 download:
   threading:
-    image: 30
+    image: 20
     photo: 16
 ```
 
@@ -109,7 +109,7 @@ dir_rule:
 download:
   cache: true
   threading:
-    image: 30
+    image: 20
     photo: 5
 
 plugins:
@@ -263,7 +263,7 @@ download:
     decode: true
     suffix: .jpg
   threading:
-    image: 30
+    image: 20
     photo: 16
 
 # Client configuration
