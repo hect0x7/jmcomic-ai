@@ -36,8 +36,8 @@ TEST_PORT = 18901
 
 
 def _start_favorite_stdio_server(log_path: str):
-    """Run the real MCP server with controlled favorite responses."""
-    from jmcomic import JmApiClient
+    """Run the real MCP server with controlled favorite and daily check-in responses."""
+    from jmcomic import JmApiClient, JmDailyCheckinResp
 
     from jmcomic_ai.core import JmcomicService
     from jmcomic_ai.mcp.server import run_server
@@ -63,6 +63,11 @@ def _start_favorite_stdio_server(log_path: str):
     client.delete_favorite_album.return_value = Mock(
         model_data={"status": "ok", "msg": "Favorite removed"},
         json=Mock(return_value={"msg": "Favorite removed"}),
+    )
+    client.daily_checkin.side_effect = lambda user_id=None: (
+        JmDailyCheckinResp(Mock(), 1, "Already checked in today", {})
+        if user_id == "99"
+        else JmDailyCheckinResp(Mock(), 0, "Check-in reward +10", {})
     )
     service.client = client
     run_server("stdio", service)
@@ -93,6 +98,10 @@ class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
                     read_stream, write_stream, read_timeout_seconds=timedelta(seconds=10)
                 ) as session:
                     await session.initialize()
+                    tools_res = await session.list_tools()
+                    registered_tool_names = [t.name for t in tools_res.tools]
+                    self.assertIn("daily_checkin", registered_tool_names)
+                    self.assertEqual(22, len(registered_tool_names))
                     cases = [
                         (
                             "get_favorite_folders",
@@ -163,6 +172,36 @@ class TestFavoriteMCPIntegration(unittest.IsolatedAsyncioTestCase):
                                 "status": "error",
                                 "title": "",
                                 "message": "album_id must resolve to a positive numeric ID",
+                            },
+                        ),
+                        (
+                            "daily_checkin",
+                            {},
+                            {
+                                "status": "checked_in",
+                                "already_checked_in": False,
+                                "code": 0,
+                                "message": "Check-in reward +10",
+                            },
+                        ),
+                        (
+                            "daily_checkin",
+                            {"user_id": "99"},
+                            {
+                                "status": "already_checked_in",
+                                "already_checked_in": True,
+                                "code": 1,
+                                "message": "Already checked in today",
+                            },
+                        ),
+                        (
+                            "daily_checkin",
+                            {"user_id": "0"},
+                            {
+                                "status": "error",
+                                "already_checked_in": False,
+                                "code": -1,
+                                "message": "user_id must be a positive numeric ID",
                             },
                         ),
                     ]
@@ -273,6 +312,7 @@ class TestMCPIntegration(unittest.IsolatedAsyncioTestCase):
                 "download_photo",
                 "download_cover",
                 "login",
+                "daily_checkin",
                 "update_option",
                 "post_process",
                 "plan_download",

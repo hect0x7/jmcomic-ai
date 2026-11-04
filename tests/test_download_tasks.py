@@ -716,6 +716,40 @@ class TestDownloadTasks(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(["success", "failed"], [detail["status"] for detail in plan["details"]])
         self.assertTrue(plan["network_requested"])
 
+    async def test_task_snapshot_isolates_auth_and_preserves_dollar_brace_passwords(self):
+        self.service.option.auth["username"] = "task_user"
+        self.service.option.auth["password"] = "${literal_password_value}"
+        self.service.option.update_auth(cookies={"AVS": "snapshot_avs"}, user_id="42")
+
+        ready = threading.Event()
+        proceed = threading.Event()
+        captured: dict[str, object] = {}
+
+        def download(option_arg, jm_id, **kwargs):
+            del kwargs
+            ready.set()
+            proceed.wait(timeout=3)
+            captured["username"] = option_arg.auth.get("username")
+            captured["password"] = option_arg.auth.get("password")
+            captured["cookies"] = dict(option_arg.auth.get("cookies") or {})
+            captured["user_id"] = option_arg.auth.get("user_id")
+            return self.result(jm_id)
+
+        with patch.object(JmOption, "download_album", download):
+            started = await self.service.start_download(["1"])
+            await asyncio.to_thread(ready.wait, 3)
+            # Mutate service.option.auth after task submission; running task must stay isolated.
+            self.service.option.auth["username"] = "mutated_user"
+            self.service.option.update_auth(cookies={"AVS": "mutated_avs"}, user_id="999")
+            proceed.set()
+            report = await self.service._downloads.wait(started["task_id"])
+
+        self.assertEqual("success", report["status"])
+        self.assertEqual("task_user", captured["username"])
+        self.assertEqual("${literal_password_value}", captured["password"])
+        self.assertEqual({"AVS": "snapshot_avs"}, captured["cookies"])
+        self.assertEqual("42", captured["user_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

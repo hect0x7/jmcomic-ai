@@ -12,7 +12,7 @@ log: true
 ## Basic Download Configuration
 
 ```yaml
-version: "2.0"
+version: "2.1"
 log: true
 
 # Set download directory
@@ -33,7 +33,7 @@ download:
 ## Configuration with Proxy
 
 ```yaml
-version: "2.0"
+version: "2.1"
 log: true
 
 dir_rule:
@@ -54,36 +54,35 @@ client:
 #         https: 127.0.0.1:7890
 ```
 
-## Configuration with Login
+## Configuration with Login (`option v2.1`)
 
 ```yaml
-version: "2.0"
+version: "2.1"
 log: true
 
 dir_rule:
   base_dir: D:/downloads/jmcomic/
 
-# Login with cookies
 client:
   postman:
     meta_data:
       proxies: system
-      cookies:
-        AVS: your_avs_cookie_value_from_browser
 
-# Or use login plugin
-plugins:
-  after_init:
-    - plugin: login
-      kwargs:
-        username: your_username
-        password: your_password
+# Recommended: lazy auto-login via top-level auth + environment variables
+auth:
+  username: ${JM_USERNAME}
+  password: ${JM_PASSWORD}
+
+# Or authenticate by session cookie (takes priority over postman cookies):
+# auth:
+#   cookies:
+#     AVS: ${JM_COOKIE_AVS}
 ```
 
 ## Advanced Directory Rules
 
 ```yaml
-version: "2.0"
+version: "2.1"
 
 dir_rule:
   base_dir: ${JM_DOWNLOAD_DIR}/
@@ -100,7 +99,7 @@ download:
 ## Configuration with Plugins
 
 ```yaml
-version: "2.0"
+version: "2.1"
 log: true
 
 dir_rule:
@@ -128,15 +127,25 @@ plugins:
           base_dir: D:/covers/
           rule: '{Atitle}/{Aid}_cover.jpg'
 
-  # Compress and notify after download
-  after_album:
+  # Compress each chapter after chapter download
+  after_photo:
     - plugin: zip
       kwargs:
-        level: photo
         suffix: zip
         delete_original_file: true
         encrypt:
           type: random
+
+  # Generate Calibre sidecar metadata & send email after album download
+  after_album:
+    - plugin: calibre_metadata
+      kwargs:
+        dir_rule:
+          base_dir: D:/downloads/jmcomic/
+          rule: 'Bd/{Aid}/metadata.opf'
+        include_cover: true
+        fields:
+          language: zh
 
     - plugin: send_qq_email
       kwargs:
@@ -150,7 +159,7 @@ plugins:
 ## PDF Generation Configuration
 
 ```yaml
-version: "2.0"
+version: "2.1"
 
 dir_rule:
   base_dir: D:/downloads/jmcomic/
@@ -178,11 +187,11 @@ plugins:
 ## Multi-Domain Configuration
 
 ```yaml
-version: "2.0"
+version: "2.1"
 
 client:
   impl: html
-  async_impl: async_api
+  async_impl: null  # Automatically follows impl -> async_html
   cache: level_option
   # Try multiple domains in order
   domain:
@@ -201,7 +210,7 @@ client:
 ## Skip Low-Quality Chapters
 
 ```yaml
-version: "2.0"
+version: "2.1"
 
 dir_rule:
   base_dir: D:/downloads/jmcomic/
@@ -217,7 +226,7 @@ plugins:
 ## Auto-Update Subscription
 
 ```yaml
-version: "2.0"
+version: "2.1"
 
 dir_rule:
   base_dir: D:/downloads/jmcomic/
@@ -247,7 +256,7 @@ plugins:
 ## Complete Production Configuration
 
 ```yaml
-version: "2.0"
+version: "2.1"
 log: true
 
 # Directory configuration
@@ -269,7 +278,7 @@ download:
 # Client configuration
 client:
   impl: html
-  async_impl: async_api
+  async_impl: null  # Follows impl -> async_html
   cache: level_option
   domain:
     html:
@@ -279,8 +288,11 @@ client:
   postman:
     meta_data:
       proxies: system
-      cookies:
-        AVS: ${JM_COOKIE_AVS}
+
+# Account authentication
+auth:
+  username: ${JM_USERNAME}
+  password: ${JM_PASSWORD}
 
 # Plugins
 plugins:
@@ -319,11 +331,9 @@ plugins:
         encrypt:
           password: ${PDF_PASSWORD}
 
-  after_album:
-    # Compress with encryption
+    # Compress each chapter with encryption
     - plugin: zip
       kwargs:
-        level: photo
         suffix: 7z
         dir_rule:
           base_dir: ${JM_DOWNLOAD_DIR}/archives/
@@ -333,6 +343,7 @@ plugins:
           impl: 7z
           type: random
 
+  after_album:
     # Send completion email
     - plugin: send_qq_email
       kwargs:
@@ -345,12 +356,12 @@ plugins:
 
 ## Notes
 
-1. **Environment Variables**: Use `${VAR_NAME}` syntax to reference environment variables
+1. **Environment Variables**: Use `${VAR_NAME}` syntax to reference environment variables (`auth`, `dir_rule.base_dir`, and plugin `kwargs`)
 2. **Directory Rules**:
    - `Bd` = Base Directory
    - `Axxx` = Album properties (e.g., `Aid`, `Atitle`, `Aauthor`)
    - `Pxxx` = Photo/Chapter properties (e.g., `Pid`, `Ptitle`, `Pindex`)
 3. **Proxy Settings**: Must be under `client.postman.meta_data.proxies`
-4. **Cookies**: Must be under `client.postman.meta_data.cookies`
-5. **Plugin Lifecycle**: Choose the right stage for each plugin
+4. **Authentication**: Configure top-level `auth` (`username` + `password` or `auth.cookies`) in `v2.1`; `auth.cookies` takes priority over legacy `client.postman.meta_data.cookies`
+5. **Plugin Lifecycle**: Choose the right stage for each plugin (`after_photo` vs `after_album` automatically controls `zip` granularity)
 6. **Compression**: Use `7z` with `impl: 7z` for maximum privacy (encrypts file headers)

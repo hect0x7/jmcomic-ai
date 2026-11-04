@@ -248,6 +248,92 @@ class TestLoginScript(_JmLogStateIsolation, unittest.TestCase):
         service.update_option.assert_called_once()
         call_arg = service.update_option.call_args[0][0]
         self.assertEqual("test_avs_123", call_arg["client"]["postman"]["meta_data"]["cookies"]["AVS"])
+        self.assertEqual(
+            {"username": "test_user", "password": None, "cookies": {"AVS": "test_avs_123"}},
+            call_arg["auth"],
+        )
+
+    def test_login_save_auth_env_updates_top_level_auth_with_placeholders(self):
+        args = SimpleNamespace(
+            username="test_user",
+            password="CANARY_SECRET_PASSWORD",
+            impl="api",
+            domain=None,
+            proxy=None,
+            save=False,
+            save_auth="env",
+            option=None,
+            json=True,
+        )
+        service = Mock()
+        service.option_path = "mock/option.yml"
+        service.update_option.return_value = "option updated"
+        api_success = {
+            "status": "success",
+            "uid": "12345",
+            "username": "test_user",
+            "avs_cookie": "test_avs_123",
+            "client_domain": "api.test",
+        }
+
+        buf = io.StringIO()
+        with (
+            patch.object(login, "parse_args", return_value=args),
+            patch.object(login, "JmcomicService", return_value=service),
+            patch.object(login, "detect_local_proxy", return_value=None),
+            patch.object(login, "perform_api_login", return_value=api_success),
+            redirect_stdout(buf),
+            self.assertRaises(SystemExit) as exit_context,
+        ):
+            login.main()
+
+        self.assertEqual(0, exit_context.exception.code)
+        call_arg = service.update_option.call_args[0][0]
+        self.assertEqual(
+            {"username": "${JM_USERNAME}", "password": "${JM_PASSWORD}", "cookies": None},
+            call_arg["auth"],
+        )
+        self.assertEqual("api", call_arg["client"]["impl"])
+        self.assertEqual(["api.test"], call_arg["client"]["domain"])
+        self.assertIsNone(call_arg["client"]["postman"]["meta_data"]["cookies"])
+        self.assertNotIn("CANARY_SECRET_PASSWORD", json.dumps(call_arg))
+
+    def test_save_and_save_auth_are_mutually_exclusive_and_clear_stale_state(self):
+        import tempfile
+        from pathlib import Path
+
+        from jmcomic import PackerUtil
+
+        from jmcomic_ai.core import JmcomicService
+
+        with (
+            patch("sys.argv", ["login.py", "-u", "u", "-p", "p", "--save", "--save-auth", "env"]),
+            io.StringIO() as stderr_buf,
+            patch("sys.stderr", stderr_buf),
+            self.assertRaises(SystemExit) as exit_ctx,
+        ):
+            login.parse_args()
+        self.assertEqual(2, exit_ctx.exception.code)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            option_file = Path(temp_dir) / "option.yml"
+            service = JmcomicService(option_path=str(option_file))
+            saved, _ = login.save_credentials_to_option(
+                service, "stale_cookie", "html", "18comic.ink", username="alice"
+            )
+            self.assertTrue(saved)
+            raw_after_cookie, _ = PackerUtil.unpack(str(option_file))
+            self.assertEqual({"AVS": "stale_cookie"}, raw_after_cookie["auth"]["cookies"])
+
+            saved, _ = login.save_auth_config_to_option(
+                service, "env", "alice", "CANARY_SECRET", "html", "18comic.ink"
+            )
+            self.assertTrue(saved)
+            raw_after_auth, _ = PackerUtil.unpack(str(option_file))
+            self.assertEqual("${JM_USERNAME}", raw_after_auth["auth"]["username"])
+            self.assertEqual("${JM_PASSWORD}", raw_after_auth["auth"]["password"])
+            self.assertIsNone(raw_after_auth["auth"]["cookies"])
+            self.assertIsNone(raw_after_auth["client"]["postman"]["meta_data"]["cookies"])
 
     def test_save_option_failure_is_reported(self):
         service = Mock()

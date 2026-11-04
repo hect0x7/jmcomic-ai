@@ -97,6 +97,13 @@ class TestReleaseMetadata(unittest.TestCase):
             self.assertEqual((root / "release_body.txt").read_text(encoding="utf-8"), "### Fixed\n- Reliable release notes.\n")
             self.assertEqual(output_path.read_text(encoding="utf-8"), "tag=v1.2.3\n")
 
+    def test_current_repository_release_metadata_is_valid(self):
+        from jmcomic_ai import __version__
+
+        tag, body = release.build_release_metadata(PROJECT_ROOT)
+        self.assertEqual(tag, f"v{__version__}")
+        self.assertTrue(body.strip())
+
 
 class TestPublishWorkflow(unittest.TestCase):
     def test_workflow_uses_changelog_release_script_without_commit_body(self):

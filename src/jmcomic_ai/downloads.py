@@ -170,10 +170,16 @@ class DownloadTasks:
         try:
             held_lease = held_lease or self.store.acquire(task_id)
             # Freeze configuration at submission, including runtime-only overrides.
+            source_snapshots = {
+                field: copy.deepcopy(getattr(self.service.option, field).src_dict)
+                for field in ("download", "client", "plugins", "auth")
+                if hasattr(self.service.option, field)
+            }
             option = self.service.option.copy_option()
-            for field in ("download", "client", "plugins"):
-                original = getattr(option, field)
-                setattr(option, field, type(original)(copy.deepcopy(original.src_dict)))
+            for field, snapshot in source_snapshots.items():
+                original = getattr(self.service.option, field)
+                setattr(self.service.option, field, type(original)(copy.deepcopy(snapshot)))
+                setattr(option, field, type(original)(snapshot))
             # The downloader's sequential fast path also reads these fields. Updating
             # only Runtime would leave an original threading=1 setting serial even
             # when this task explicitly requests more workers.

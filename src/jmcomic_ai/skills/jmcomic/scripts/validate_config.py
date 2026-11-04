@@ -81,8 +81,25 @@ def print_config_summary(option: JmOption):
     # Client settings
     print("🌐 Client:")
     print(f"  - Implementation: {option.client.get('impl', 'html')}")
+    print(f"  - Async implementation: {option.client.get('async_impl') or 'auto (follows impl)'}")
     if 'domain' in option.client:
         print(f"  - Domain: {option.client['domain']}")
+
+    # Auth settings (never print secrets or raw cookies)
+    auth = getattr(option, "auth", {}) or {}
+    postman_meta = option.client.get('postman', {}).get('meta_data', {})
+    has_auth_user = bool(auth.get("username"))
+    has_auth_pwd = bool(auth.get("password"))
+    has_cookies = bool(auth.get("cookies") or postman_meta.get("cookies"))
+    if has_auth_user or has_auth_pwd or has_cookies:
+        print("\n🔐 Auth:")
+        if has_auth_user:
+            print(f"  - Username: {auth.get('username')}")
+        if has_auth_pwd:
+            print("  - Password: configured (redacted)")
+        if has_cookies:
+            source = "auth.cookies" if auth.get("cookies") else "client.postman.meta_data.cookies"
+            print(f"  - Cookies: configured ({source})")
 
     # Download settings
     print("\n📥 Download:")

@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import functools
 import json
 import logging
@@ -25,12 +26,14 @@ from jmcomic import (
     JmCategoryPage,
     JmcomicClient,
     JmcomicText,
+    JmDailyCheckinResp,
     JmDownloader,
     JmMagicConstants,
     JmModuleConfig,
     JmOption,
     JmPageContent,
     JmSearchPage,
+    PackerUtil,
     create_option_by_file,
     get_jm_task_context,
     jm_logger,
@@ -377,12 +380,19 @@ class JmcomicService:
         self.task_log_dir = (
             Path(task_log_dir or os.getenv(ENV_TASK_LOG_DIR) or DEFAULT_TASK_LOG_DIR).expanduser().resolve()
         )
+        self._session_auth: dict[str, Any] | None = None
         self.option = self._load_option()
         self._client: JmcomicClient | None = None
         self._ensure_init()
         from jmcomic_ai.downloads import DownloadTasks
 
         self._downloads = DownloadTasks(self)
+
+    def _enforce_file_only_logging(self) -> None:
+        log_path = getattr(self, "log_path", None)
+        if log_path is not None:
+            global_handler = _get_global_file_handler(log_path)
+            _configure_logger_file_only(jm_logger, global_handler)
 
     def _load_option(self) -> JmOption:
         self.logger.info(f"Loading jmcomic option from: {self.option_path}")
@@ -392,20 +402,24 @@ class JmcomicService:
             self.option_path.parent.mkdir(parents=True, exist_ok=True)
             default_option = JmModuleConfig.option_class().default()
             default_option.to_file(str(self.option_path))
+            self._enforce_file_only_logging()
             self.logger.info("Default option generated and loaded.")
             return default_option
 
         try:
             option = create_option_by_file(str(self.option_path))
         except DownloadCancelledException:
+            self._enforce_file_only_logging()
             raise
         except Exception as error:
+            self._enforce_file_only_logging()
             # Configuration parsing and initialization are separate from download
             # execution. Expose a stable CLI/MCP error without copying YAML
             # snippets (which can contain credentials) into results or logs.
             error_type = type(error).__name__
             self.logger.warning("Could not load option (%s)", error_type)
             raise ValueError(f"Could not load option file ({error_type}); check its format and settings") from error
+        self._enforce_file_only_logging()
         self.logger.info("Option loaded successfully.")
         return option
 
@@ -413,11 +427,26 @@ class JmcomicService:
         """Ensure necessary initialization"""
         pass
 
+    def _ensure_option_auth_login(self) -> None:
+        """Lazily authenticate via top-level option.auth when username and password are set."""
+        if getattr(self, "_session_auth", None):
+            return
+        option = getattr(self, "option", None)
+        if option is None:
+            return
+        auth = getattr(option, "auth", None)
+        if auth is not None and auth.get("username") and auth.get("password"):
+            option.login_with_option_auth()
+
     @property
     def client(self) -> JmcomicClient:
         """Build the network client on first use, avoiding eager client setup (initialization plugins retain their own behavior)."""
         if self._client is None:
+            self._ensure_option_auth_login()
             self._client = self.option.build_jm_client()
+            session_auth = getattr(self, "_session_auth", None)
+            if session_auth and session_auth.get("username") and hasattr(self._client, "_username"):
+                self._client._username = session_auth["username"]
         return self._client
 
     @client.setter
@@ -473,6 +502,12 @@ class JmcomicService:
         """
         self.option = self._load_option()
         self.client = None
+        session_auth = getattr(self, "_session_auth", None)
+        if session_auth and hasattr(self.option, "update_auth"):
+            self.option.update_auth(
+                cookies=session_auth.get("cookies"),
+                user_id=session_auth.get("user_id"),
+            )
 
     def update_option(self, option_updates: dict[str, Any]) -> str:
         """
@@ -485,7 +520,7 @@ class JmcomicService:
 
         参数:
             option_updates: 要合并的配置更新字典。
-                           支持对 client、download、dir_rule 等进行嵌套更新。
+                           支持对 auth、client、download、dir_rule、plugins 等进行嵌套更新。
 
         返回:
             包含文件路径的成功消息，或错误消息。
@@ -497,25 +532,48 @@ class JmcomicService:
             }
         """
         try:
-            # 1. 获取当前配置
-            current_option = self.option.deconstruct()
+            # 1. 获取当前配置（对已持久化的 auth 字段保留原始 ${ENV} 占位符及显式 cookies）
+            current_option = copy.deepcopy(self.option.deconstruct())
+            if self.option_path.exists():
+                try:
+                    persisted_raw, _ = PackerUtil.unpack(str(self.option_path))
+                except Exception:
+                    persisted_raw = None
+                if isinstance(persisted_raw, dict):
+                    if isinstance(persisted_raw.get("auth"), dict):
+                        current_option["auth"] = copy.deepcopy(persisted_raw["auth"])
+                    if persisted_raw.get("log") == "pretty":
+                        current_option["log"] = "pretty"
 
             # 2. 合并配置
-            merged_option = JmOption.merge_default_dict(option_updates, current_option)
+            merged_option = JmOption.merge_default_dict(copy.deepcopy(option_updates), current_option)
 
-            # 3. 验证配置（construct 会校验）
-            new_option = JmOption.construct(merged_option)
+            # 3. 验证配置（使用副本避免 construct 提前将 ${ENV} 展开为明文或置空）
+            new_option = JmOption.construct(copy.deepcopy(merged_option))
 
-            # 4. 保存到文件
-            new_option.to_file(str(self.option_path))
+            # 4. 保存到文件（不写入运行时临时 user_id，保留原始 auth 占位符与显式 cookies）
+            to_save = new_option.deconstruct()
+            if isinstance(merged_option.get("auth"), dict):
+                to_save["auth"] = {
+                    key: value
+                    for key, value in merged_option["auth"].items()
+                    if key != "user_id"
+                }
+            if merged_option.get("log") == "pretty":
+                to_save["log"] = "pretty"
+            self.option_path.parent.mkdir(parents=True, exist_ok=True)
+            PackerUtil.pack(to_save, str(self.option_path))
 
-            # 5. 更新内存中的 option
+            # 5. 更新内存中的 option（显式修改 auth 时清理旧 MCP 临时登录态，否则保留）
+            if "auth" in option_updates:
+                self._session_auth = None
             self.reload_option()
 
             self.logger.info("option updated successfully")
             return f"option updated and saved to {self.option_path}"
 
         except Exception as e:
+            self._enforce_file_only_logging()
             self.logger.error(f"option update failed: {str(e)}")
             return f"option update failed: {str(e)}"
 
@@ -1071,8 +1129,8 @@ class JmcomicService:
 
     def login(self, username: str, password: str) -> str:
         """
-        登录 JMComic 账户以访问更多功能（如收藏夹、高级内容等）。
-        登录后的会话 Cookie 会自动保存，供后续请求使用。
+        登录 JMComic 账户以访问更多功能（如收藏夹、每日签到、受限本子等）。
+        登录后的会话状态仅保存在当前运行内存中（不落盘），供当前会话后续查询和下载请求共享。
 
         参数:
             username: 用户名
@@ -1084,19 +1142,73 @@ class JmcomicService:
         client = self.get_client()
         try:
             client.login(username, password)
+            raw_cookies = client.get_meta_data("cookies") if hasattr(client, "get_meta_data") else None
+            cookies = dict(raw_cookies) if isinstance(raw_cookies, dict) else None
+            raw_uid = getattr(client, "_user_id", None)
+            user_id = raw_uid if isinstance(raw_uid, str) else (str(raw_uid) if isinstance(raw_uid, int) else None)
+            self._session_auth = {
+                "username": username,
+                "cookies": cookies,
+                "user_id": user_id,
+            }
+            option = getattr(self, "option", None)
+            if option is not None and hasattr(option, "update_auth"):
+                option.update_auth(cookies=cookies, user_id=user_id)
+            if hasattr(client, "_username"):
+                client._username = username
             self.logger.info(f"Successfully logged in as {username}")
             return f"Successfully logged in as {username}"
         except Exception as e:
             self.logger.error(f"Login failed for {username}: {str(e)}")
             return f"Login failed: {str(e)}"
 
+    def daily_checkin(self, user_id: str = "") -> dict[str, Any]:
+        """
+        执行已登录账户的每日签到打卡，需要有效的登录会话、顶层 auth 账号配置或 Cookie。
+        今日已签到时不会报错，而是返回 status="already_checked_in"。
+
+        参数:
+            user_id: 可选的用户数字 ID。API 客户端在仅配置 Cookie（未执行密码登录）时需提供；
+                通过 login 工具或顶层 auth 账号密码自动登录后可省略，HTML 客户端无需此参数。
+
+        返回:
+            status: "checked_in"（签到成功）、"already_checked_in"（今日已签）或 "error"。
+            already_checked_in: 今日是否已完成签到（布尔值）。
+            code: 上游签到码（0=签到成功，1=重复签到，-1=执行失败）。
+            message: 服务端奖励信息、重复签到提示或错误说明。
+        """
+        normalized_user_id = user_id.strip() or None
+        if normalized_user_id is not None and (
+            not normalized_user_id.isascii() or not normalized_user_id.isdecimal() or int(normalized_user_id) < 1
+        ):
+            error_msg = "user_id must be a positive numeric ID"
+            self.logger.error(error_msg)
+            return {"status": "error", "already_checked_in": False, "code": -1, "message": error_msg}
+
+        try:
+            resp: JmDailyCheckinResp = self.get_client().daily_checkin(user_id=normalized_user_id)
+            already = resp.code == JmDailyCheckinResp.CODE_ALREADY_CHECKED_IN
+            status = "already_checked_in" if already else "checked_in"
+            default_msg = "Already checked in today." if already else "Daily check-in succeeded."
+            message = str(resp.msg).strip() or default_msg
+            self.logger.info(f"Daily check-in finished: status={status}, code={resp.code}")
+            return {
+                "status": status,
+                "already_checked_in": already,
+                "code": int(resp.code),
+                "message": message,
+            }
+        except Exception as e:
+            self.logger.error(f"Daily check-in failed: {e}")
+            return {"status": "error", "already_checked_in": False, "code": -1, "message": str(e)}
+
     def get_favorite_folders(self, username: str = "") -> dict[str, Any]:
         """
         获取已登录账户的收藏夹目录。
 
         参数:
-            username: HTML 客户端仅配置 Cookie 时必须提供用户名；通过 login 登录后可省略。
-                API 客户端忽略此参数，始终查询当前登录账户。
+            username: HTML 客户端仅配置 Cookie（未设置 auth.username）时必须提供用户名；
+                通过 login 登录或配置顶层 auth 后可省略。API 客户端忽略此参数，始终查询当前登录账户。
 
         返回:
             folders: 收藏夹列表，每项包含字符串 id 和 name；无收藏夹时为空列表。
@@ -1125,8 +1237,8 @@ class JmcomicService:
             page: 页码，从 1 开始（默认值：1）。
             order_by: 排序方式，favorite_time 按收藏时间、update_time 按更新时间
                 （默认值：favorite_time）。
-            username: HTML 客户端仅配置 Cookie 时必须提供用户名；通过 login 登录后可省略。
-                API 客户端忽略此参数，始终查询当前登录账户。
+            username: HTML 客户端仅配置 Cookie（未设置 auth.username）时必须提供用户名；
+                通过 login 登录或配置顶层 auth 后可省略。API 客户端忽略此参数，始终查询当前登录账户。
 
         返回:
             albums: 本子摘要列表，包含 id、title、tags、cover_url。
@@ -1257,7 +1369,7 @@ class JmcomicService:
 
     def get_album_detail(self, album_id: str) -> dict[str, Any]:
         """
-        获取特定本子的详细信息。
+        获取特定本子的详细信息。API 客户端传入子章节 ID 时会自动解析并返回所属父本子的详情。
 
         参数:
             album_id: 本子 ID (例如 "123456")

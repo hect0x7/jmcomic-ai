@@ -24,10 +24,12 @@ from jmcomic import (
     JmApiClient,
     JmApiResp,
     JmcomicClient,
+    JmDailyCheckinResp,
     JmHtmlClient,
     JmModuleConfig,
     JmOption,
     jm_log,
+    jm_logger,
     jm_task_context,
 )
 
@@ -163,6 +165,74 @@ class TestJmcomicCompatibility(unittest.TestCase):
         self.assertFalse(list(validator.iter_errors(valid_progress)))
         self.assertTrue(list(validator.iter_errors(invalid_progress)))
         self.assertFalse(list(validator.iter_errors(other_plugin)))
+
+    def test_option_schema_accepts_full_default_option_and_v2_1_fields(self):
+        project_root = Path(__file__).resolve().parents[1]
+        schema_path = project_root / "src" / "jmcomic_ai" / "skills" / "jmcomic" / "assets" / "option_schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        from jsonschema import Draft7Validator
+
+        validator = Draft7Validator(schema)
+        default_errors = list(validator.iter_errors(JmOption.default().deconstruct()))
+        self.assertFalse(default_errors, default_errors)
+
+        v21_option = {
+            "version": "2.1",
+            "log": "pretty",
+            "auth": {
+                "username": "${JM_USERNAME}",
+                "password": "${JM_PASSWORD}",
+                "cookies": {"AVS": "${JM_COOKIE_AVS}"},
+            },
+            "client": {
+                "impl": "html",
+                "async_impl": "async_html",
+                "postman": {
+                    "type": "cffi",
+                    "meta_data": {
+                        "impersonate": "chrome110",
+                        "proxies": "http://127.0.0.1:7890",
+                    },
+                },
+            },
+            "plugins": {
+                "valid": "raise",
+                "dependencies_strategy": "failed-fast",
+                "after_init": [{"plugin": "login"}],
+                "after_album": [
+                    {
+                        "plugin": "calibre_metadata",
+                        "kwargs": {
+                            "dir_rule": {"base_dir": "./", "rule": "Bd/Aid/metadata.opf"},
+                            "include_cover": True,
+                            "fields": {"language": "zh"},
+                        },
+                    }
+                ],
+            },
+        }
+        self.assertFalse(list(validator.iter_errors(v21_option)))
+        self.assertTrue(list(validator.iter_errors({"auth": {"unexpected_field": True}})))
+        self.assertTrue(
+            list(
+                validator.iter_errors(
+                    {
+                        "plugins": {
+                            "after_album": [
+                                {
+                                    "plugin": "calibre_metadata",
+                                    "kwargs": {
+                                        "dir_rule": {"base_dir": "./", "rule": "Bd/Aid/metadata.opf"},
+                                        "unknown_arg": 1,
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                )
+            )
+        )
 
     def test_download_result_paths_are_resolved(self):
         result = SimpleNamespace(
@@ -731,6 +801,178 @@ class TestDownloadTaskLogs(unittest.IsolatedAsyncioTestCase):
             log_text = Path(result["log_path"]).read_text(encoding="utf-8")
             self.assertIn("mcp_tool=download-photo", log_text)
             self.assertIn("photo=404", log_text)
+
+
+class TestOptionAuthAndSessionSync(unittest.TestCase):
+    @staticmethod
+    def _close_temp_handlers(temp_root: Path) -> None:
+        resolved = temp_root.resolve()
+        for logger in (logging.getLogger(), logging.getLogger("jmcomic_ai"), jm_logger):
+            for handler in list(logger.handlers):
+                if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename).resolve().is_relative_to(
+                    resolved
+                ):
+                    logger.removeHandler(handler)
+                    handler.close()
+
+    def test_login_syncs_session_auth_without_persisting_credentials(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            option_path = root / "option.yml"
+            try:
+                service = JmcomicService(
+                    option_path=str(option_path),
+                    task_log_dir=str(root / "tasks"),
+                    log_path=str(root / "service.log"),
+                )
+                client = Mock(spec=JmApiClient)
+                client._user_id = None
+                client._username = None
+
+                def fake_login(username: str, password: str):
+                    del username, password
+                    # Upstream jmcomic 2.7.11 updates only the client, not option.auth.
+                    client._user_id = "7788"
+                    client.get_meta_data.return_value = {"AVS": "session_avs_token"}
+
+                client.login.side_effect = fake_login
+                service.client = client
+
+                msg = service.login("alice", "s3cr3t_pass")
+                self.assertIn("Successfully logged in as alice", msg)
+                self.assertEqual({"AVS": "session_avs_token"}, service.option.auth.get("cookies"))
+                self.assertEqual("7788", service.option.auth.get("user_id"))
+                self.assertEqual("alice", client._username)
+
+                update_msg = service.update_option({"download": {"threading": {"image": 32}}})
+                self.assertIn("option updated and saved", update_msg)
+                saved_yaml = option_path.read_text(encoding="utf-8")
+                self.assertNotIn("session_avs_token", saved_yaml)
+                self.assertNotIn("7788", saved_yaml)
+                self.assertNotIn("s3cr3t_pass", saved_yaml)
+                # Active MCP session auth remains alive when unrelated options are updated.
+                self.assertEqual({"AVS": "session_avs_token"}, service.option.auth.get("cookies"))
+                self.assertEqual("7788", service.option.auth.get("user_id"))
+
+                # Explicit auth update clears old session auth and writes env placeholders cleanly.
+                service.update_option(
+                    {"auth": {"username": "${JM_USERNAME}", "password": "${JM_PASSWORD}"}}
+                )
+                self.assertIsNone(service._session_auth)
+                updated_yaml = option_path.read_text(encoding="utf-8")
+                self.assertIn("${JM_USERNAME}", updated_yaml)
+                self.assertIn("${JM_PASSWORD}", updated_yaml)
+            finally:
+                self._close_temp_handlers(root)
+
+    def test_top_level_auth_lazily_logs_in_and_preserves_env_placeholders_and_file_only_logs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            option_path = root / "option.yml"
+            option_path.write_text(
+                'version: "2.1"\n'
+                "log: pretty\n"
+                "auth:\n"
+                '  username: "${JM_USERNAME}"\n'
+                '  password: "${JM_PASSWORD}"\n',
+                encoding="utf-8",
+            )
+            try:
+                with (
+                    patch.dict(
+                        os.environ,
+                        {"JM_USERNAME": "env_user", "JM_PASSWORD": "CANARY_ENV_SECRET_42"},
+                        clear=False,
+                    ),
+                    patch.object(JmOption, "login_with_option_auth", autospec=True) as mock_auto_login,
+                ):
+                    service = JmcomicService(
+                        option_path=str(option_path),
+                        task_log_dir=str(root / "tasks"),
+                        log_path=str(root / "service.log"),
+                    )
+                    # Lazy initialization: zero network login calls during __init__.
+                    mock_auto_login.assert_not_called()
+                    # File-only logging enforced even when option.yml sets log: pretty.
+                    self.assertTrue(all(isinstance(h, logging.FileHandler) for h in jm_logger.handlers))
+
+                    with patch.object(service.option, "build_jm_client", return_value=Mock()):
+                        _ = service.get_client()
+                    mock_auto_login.assert_called_once_with(service.option)
+
+                    # Updating unrelated option fields must preserve ${ENV_VAR} placeholders and log: pretty.
+                    msg = service.update_option({"download": {"threading": {"image": 25}}})
+                    self.assertIn("option updated and saved", msg)
+                    saved_text = option_path.read_text(encoding="utf-8")
+                    self.assertIn("${JM_USERNAME}", saved_text)
+                    self.assertIn("${JM_PASSWORD}", saved_text)
+                    self.assertIn("log: pretty", saved_text)
+                    self.assertNotIn("CANARY_ENV_SECRET_42", saved_text)
+                    self.assertTrue(all(isinstance(h, logging.FileHandler) for h in jm_logger.handlers))
+            finally:
+                self._close_temp_handlers(root)
+
+
+class TestDailyCheckin(unittest.TestCase):
+    def setUp(self):
+        self.service = object.__new__(JmcomicService)
+        self.service.logger = logging.getLogger("jmcomic_ai.test.daily_checkin")
+        self.client = Mock()
+        self.service.client = self.client
+
+    def test_daily_checkin_newly_checked_in(self):
+        self.client.daily_checkin.return_value = JmDailyCheckinResp(
+            Mock(), JmDailyCheckinResp.CODE_SUCCESS, "获得 20 JCoins", {}
+        )
+        result = self.service.daily_checkin()
+        self.client.daily_checkin.assert_called_once_with(user_id=None)
+        self.assertEqual(
+            {
+                "status": "checked_in",
+                "already_checked_in": False,
+                "code": 0,
+                "message": "获得 20 JCoins",
+            },
+            result,
+        )
+
+    def test_daily_checkin_already_checked_in(self):
+        self.client.daily_checkin.return_value = JmDailyCheckinResp(
+            Mock(), JmDailyCheckinResp.CODE_ALREADY_CHECKED_IN, "", {}
+        )
+        result = self.service.daily_checkin(user_id="12345")
+        self.client.daily_checkin.assert_called_once_with(user_id="12345")
+        self.assertEqual(
+            {
+                "status": "already_checked_in",
+                "already_checked_in": True,
+                "code": 1,
+                "message": "Already checked in today.",
+            },
+            result,
+        )
+
+    def test_daily_checkin_rejects_invalid_user_id(self):
+        for bad_uid in ("0", "-5", "abc"):
+            with self.subTest(user_id=bad_uid):
+                result = self.service.daily_checkin(user_id=bad_uid)
+                self.assertEqual("error", result["status"])
+                self.assertFalse(result["already_checked_in"])
+                self.assertEqual(-1, result["code"])
+        self.client.daily_checkin.assert_not_called()
+
+    def test_daily_checkin_handles_upstream_exception(self):
+        self.client.daily_checkin.side_effect = RuntimeError("missing user_id or cookie")
+        result = self.service.daily_checkin()
+        self.assertEqual(
+            {
+                "status": "error",
+                "already_checked_in": False,
+                "code": -1,
+                "message": "missing user_id or cookie",
+            },
+            result,
+        )
 
 
 if __name__ == "__main__":

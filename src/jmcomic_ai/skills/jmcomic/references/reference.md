@@ -4,11 +4,12 @@ Complete reference for configuring `jmcomic` behavior.
 
 ## Top Level Fields
 
-- **`version`**: Configuration version string (e.g., "2.0")
-- **`log`**: Boolean, whether `jmcomic` generates normal log records (default: true). JMComic AI routes these records to its global log file instead of stdout/stderr.
+- **`version`**: Configuration version string (`"2.1"` recommended; backward-compatible with `"2.0"`)
+- **`log`**: Boolean or `"pretty"` (default: `true`). JMComic AI enforces file-only logging even when `"pretty"` is set so MCP `stdio` JSON-RPC never receives stdout/stderr log pollution.
 - **`dir_rule`**: Directory and file naming rules
 - **`download`**: Download behavior configuration
-- **`client`**: Network client configuration (domains, retry, proxies, cookies)
+- **`client`**: Network client configuration (domains, retry, proxies, async client)
+- **`auth`**: Account credentials and session cookies (recommended in `v2.1`)
 - **`plugins`**: Plugin configurations
 
 ---
@@ -93,7 +94,9 @@ Network client configuration.
   - `api`: APP client (no IP restriction, better compatibility)
 
 - **`async_impl`**: Native async client implementation
-  - Currently supported value: `async_api`
+  - `null` (default): Automatically follows `impl` (`api` → `async_api`, `html` → `async_html`)
+  - `async_api` (or `api`): Force async APP API client
+  - `async_html` (or `html`): Force async Web HTML client
   - Used by upstream `_async` APIs such as `download_album_async`
 
 - **`cache`**: Metadata cache scope for album details, searches, and other client requests
@@ -110,7 +113,9 @@ Network client configuration.
 - **`retry_times`**: Integer, number of retry attempts on failure (default: 5)
 
 - **`postman`**: Request configuration
+  - **`type`**: HTTP backend implementation (default: `cffi`)
   - **`meta_data`**: Metadata for requests
+    - **`impersonate`**: Browser TLS fingerprint (default: `chrome110`)
     - **`proxies`**: Proxy configuration
       - `null`: No proxy
       - `system`: Use system proxy (default)
@@ -118,7 +123,7 @@ Network client configuration.
       - `v2ray`: Use V2Ray proxy
       - `127.0.0.1:7890`: Custom proxy address
       - Object with `http` and `https` keys for detailed config
-    - **`cookies`**: Login cookies (optional)
+    - **`cookies`**: Legacy login cookies (optional; top-level `auth.cookies` is preferred in `v2.1` and takes precedence when both are set)
       - **`AVS`**: AVS cookie value from browser
       - **Important**: Cookies must match the domain being accessed
 
@@ -127,7 +132,7 @@ Network client configuration.
 ```yaml
 client:
   impl: html
-  async_impl: async_api
+  async_impl: null  # Auto-follows impl -> async_html
   cache: null
   domain:
     html:
@@ -138,16 +143,39 @@ client:
   retry_times: 5
   postman:
     meta_data:
-      # Proxy options:
       proxies: system
       # Or custom proxy:
       # proxies:
       #   http: 127.0.0.1:7890
       #   https: 127.0.0.1:7890
+```
 
-      # Login cookies (optional):
-      cookies:
-        AVS: your_avs_cookie_value
+---
+
+## auth
+
+Top-level account authentication settings introduced in `option v2.1` (`jmcomic >= 2.7.11`).
+
+### Fields
+
+- **`username`**: JMComic account username (`string` or `null`)
+  - Supports `${ENV_VAR}` placeholders (e.g., `${JM_USERNAME}`). Unset environment variables resolve to `null` at runtime rather than a literal `"${...}"` string.
+- **`password`**: JMComic account password (`string` or `null`)
+  - Supports `${ENV_VAR}` placeholders (e.g., `${JM_PASSWORD}`). `update_option` preserves `${ENV_VAR}` placeholders on disk without writing expanded plaintext secrets.
+  - When both `username` and `password` are present, JMComic AI lazily authenticates on the first client request or download (never eagerly during server startup or offline `plan_download`).
+- **`cookies`**: Session cookies mapping (optional, e.g., `AVS`)
+  - Takes priority over legacy `client.postman.meta_data.cookies` when both are configured.
+  - Choose **either** `username`/`password` (recommended, works for both `api` and `html`) **or** `cookies` (browser `AVS` cookies apply to `html`). Do not configure both simultaneously: on `impl: html`, existing `cookies` + `username` marks the session as already logged in and skips re-login if the cookie expires.
+
+### Example
+
+```yaml
+auth:
+  username: "${JM_USERNAME}"
+  password: "${JM_PASSWORD}"
+  # Or cookie-only authentication:
+  # cookies:
+  #   AVS: "${JM_COOKIE_AVS}"
 ```
 
 ---
@@ -156,6 +184,11 @@ client:
 
 Plugin configurations. Plugins execute at different lifecycle stages.
 
+### Policy Settings
+
+- **`valid`**: Parameter validation failure strategy (`log` default, `ignore`, or `raise`)
+- **`dependencies_strategy`**: Optional third-party dependency check strategy (`failed-fast` default, `auto-install`, or `ignore-only-log`)
+
 ### Lifecycle Stages
 
 - **`after_init`**: After initialization
@@ -163,6 +196,8 @@ Plugin configurations. Plugins execute at different lifecycle stages.
 - **`after_album`**: After downloading an album
 - **`before_photo`**: Before downloading a chapter
 - **`after_photo`**: After downloading a chapter
+- **`before_image`**: Before downloading an image
+- **`after_image`**: After downloading an image
 - **`main`**: Main execution
 
 ### Common Plugins
@@ -188,13 +223,13 @@ Show the upstream Rich album/chapter progress UI and write complete logs to a fi
 Use this only for direct interactive-terminal workflows. Do not enable it for `jmai` MCP/stdio
 downloads, which already report progress through MCP Context and return an isolated task log.
 
-#### `login` (after_init)
-Login with username and password.
+#### `login` (after_init, legacy / force re-login)
+Force an immediate login and write cookies back to `option.auth`. Prefer top-level `auth` (`username` / `password`) for lazy on-demand login in `v2.1`. When `auth` is already configured, `username` and `password` in `kwargs` may be omitted.
 ```yaml
 - plugin: login
   kwargs:
-    username: your_username
-    password: your_password
+    username: ${JM_USERNAME}
+    password: ${JM_PASSWORD}
 ```
 
 #### `download_cover` (before_album)
@@ -208,16 +243,28 @@ Download album covers.
       rule: '{Atitle}/{Aid}_cover.jpg'
 ```
 
-#### `zip` (after_album)
-Compress downloaded files.
+#### `zip` (after_album or after_photo)
+Compress downloaded files. Archive granularity is inferred automatically from the lifecycle stage (`after_album` packs the whole album; `after_photo` packs each chapter); explicit `level` in `option.yml` is deprecated.
 ```yaml
 - plugin: zip
   kwargs:
-    level: photo  # or 'album'
     suffix: zip   # or '7z'
     delete_original_file: true
     encrypt:
       type: random  # or specify password
+```
+
+#### `calibre_metadata` (after_album)
+Generate a Calibre `metadata.opf` sidecar file (and optional `cover.jpg`) for the downloaded album (requires optional `jmcomic-calibre` package).
+```yaml
+- plugin: calibre_metadata
+  kwargs:
+    dir_rule:
+      base_dir: D:/downloads/jmcomic/
+      rule: 'Bd/{Aid}/metadata.opf'
+    include_cover: true
+    fields:
+      language: zh
 ```
 
 #### `img2pdf` (after_photo or after_album)
@@ -260,13 +307,13 @@ plugins:
           base_dir: D:/covers/
           rule: '{Atitle}/{Aid}_cover.jpg'
 
-  after_album:
+  after_photo:
     - plugin: zip
       kwargs:
-        level: photo
         suffix: zip
         delete_original_file: true
 
+  after_album:
     - plugin: send_qq_email
       kwargs:
         msg_from: ${EMAIL}
@@ -280,18 +327,19 @@ plugins:
 
 ## Environment Variables
 
-All `kwargs` parameters support environment variable references using `${VAR_NAME}` syntax.
+Top-level `auth`, `dir_rule.base_dir`, and plugin `kwargs` parameters support environment variable references using `${VAR_NAME}` syntax.
 
 Example:
 ```yaml
 dir_rule:
   base_dir: ${JM_DOWNLOAD_DIR}/
 
-client:
-  postman:
-    meta_data:
-      cookies:
-        AVS: ${JM_COOKIE_AVS}
+auth:
+  username: ${JM_USERNAME}
+  password: ${JM_PASSWORD}
+  # Or cookie-based auth:
+  # cookies:
+  #   AVS: ${JM_COOKIE_AVS}
 
 plugins:
   after_album:
@@ -306,7 +354,7 @@ plugins:
 ## Complete Example
 
 ```yaml
-version: "2.0"
+version: "2.1"
 log: true
 
 dir_rule:
@@ -325,7 +373,7 @@ download:
 
 client:
   impl: html
-  async_impl: async_api
+  async_impl: null
   cache: level_option
   domain:
     html:
@@ -335,8 +383,10 @@ client:
   postman:
     meta_data:
       proxies: system
-      cookies:
-        AVS: your_avs_cookie_value
+
+auth:
+  username: ${JM_USERNAME}
+  password: ${JM_PASSWORD}
 
 plugins:
   after_init:
@@ -345,10 +395,9 @@ plugins:
         interval: 0.5
         enable_warning: true
 
-  after_album:
+  after_photo:
     - plugin: zip
       kwargs:
-        level: photo
         suffix: zip
         delete_original_file: true
         encrypt:

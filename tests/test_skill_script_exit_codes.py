@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from jmcomic_ai.skills.jmcomic.scripts import (
     album_info,
     batch_download,
+    daily_checkin,
     doctor,
     download_covers,
     download_photo,
@@ -107,6 +108,23 @@ class TestSkillScriptExitCodes(unittest.TestCase):
             self.assertRaises(SystemExit) as exit_context,
         ):
             doctor.main()
+        self.assertEqual(1, exit_context.exception.code)
+
+    def test_daily_checkin_error_exits_nonzero(self):
+        args = SimpleNamespace(user_id="", output=None, option=None)
+        service = Mock()
+        service.daily_checkin.return_value = {
+            "status": "error",
+            "already_checked_in": False,
+            "code": -1,
+            "message": "auth required",
+        }
+        with (
+            patch.object(daily_checkin, "parse_args", return_value=args),
+            patch.object(daily_checkin, "JmcomicService", return_value=service),
+            self.assertRaises(SystemExit) as exit_context,
+        ):
+            daily_checkin.main()
         self.assertEqual(1, exit_context.exception.code)
 
 

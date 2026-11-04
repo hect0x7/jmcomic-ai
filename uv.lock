@@ -156,15 +156,6 @@ wheels = [
 ]
 
 [[package]]
-name = "commonx"
-version = "0.6.40"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bf/5f/f0a136feee5b59882991129dde056bd207efd1b0a9efbf71bdf16121f4a7/commonx-0.6.40.tar.gz", hash = "sha256:d028cdfb5219a2f332dd2b2e8c3a91e34cf465197430ba676857e653f7f4e41c", size = 25753, upload-time = "2025-12-29T13:06:44.043Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/06/bb7fd47d02b7fc75c7faeba7d1366ca373a31e5b85c194acbebb8296a258/commonx-0.6.40-py3-none-any.whl", hash = "sha256:cb5c16a955848d82289e08ec121b4ec86775b22c75c65584f15cc45f86e85510", size = 34087, upload-time = "2025-12-29T13:06:42.986Z" },
-]
-
-[[package]]
 name = "cryptography"
 version = "46.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -348,18 +339,17 @@ wheels = [
 
 [[package]]
 name = "jmcomic"
-version = "2.7.9"
+version = "2.7.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "commonx" },
     { name = "curl-cffi" },
     { name = "pillow" },
     { name = "pycryptodome" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/88/a1/e1f1a6501306ae6624914912780e1f386d127e12915dd0c36b1b7a25c30c/jmcomic-2.7.9.tar.gz", hash = "sha256:265c5d15ab0ea81554dfa50e7ffe7b5a034a7137144503a795314cf6da8b3e14", size = 127670, upload-time = "2026-10-13T17:01:58.653Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/c2/c7d6060c91ed74e466d9f0606aff8d473869a2bce401453d3e54de35ece3/jmcomic-2.7.11.tar.gz", hash = "sha256:f96f2c5716d22a1ba0298ec6f12f7f9df265b643bee76edcdb62df7c2fbd9af2", size = 137291, upload-time = "2026-11-03T16:30:02.525Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/02/26589f934387cb36a1540370c7c69fafb2f2a197253d98862c8015e25c54/jmcomic-2.7.9-py3-none-any.whl", hash = "sha256:aff8416c096b3479f62dd1173a158f2337da1038f6aed8f667248023fc9ccf92", size = 132055, upload-time = "2026-10-13T17:01:57.012Z" },
+    { url = "https://files.pythonhosted.org/packages/82/1f/77c6d41e955680f05998dbf50fea15dcda7aa099923ddfd88079bc762393/jmcomic-2.7.11-py3-none-any.whl", hash = "sha256:51b2f34839c5d0408a455c8ae44f9cb299a71ef16ee7048c3a86951123c3fd6d", size = 141968, upload-time = "2026-11-03T16:30:00.377Z" },
 ]
 
 [[package]]
@@ -381,7 +371,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jmcomic", specifier = ">=2.7.9,<3.0.0" },
+    { name = "jmcomic", specifier = ">=2.7.11,<3.0.0" },
     { name = "mcp" },
     { name = "typer" },
     { name = "watchdog", specifier = ">=6.0.0" },

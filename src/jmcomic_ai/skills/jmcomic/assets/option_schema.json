@@ -8,13 +8,62 @@
             "type": "string",
             "description": "Configuration version string",
             "examples": [
+                "2.1",
                 "2.0"
             ]
         },
         "log": {
-            "type": "boolean",
+            "oneOf": [
+                {
+                    "type": "boolean"
+                },
+                {
+                    "type": "string",
+                    "const": "pretty"
+                }
+            ],
             "default": true,
-            "description": "Enable or disable jmcomic log records. JMComic AI routes enabled records to its global log file instead of stdout/stderr"
+            "description": "Enable or disable jmcomic log records (true, false, or 'pretty'). JMComic AI routes enabled records to its global log file instead of stdout/stderr"
+        },
+        "auth": {
+            "type": "object",
+            "description": "Unified account authentication configuration (introduced in option v2.1). Supports ${ENV_VAR} placeholders; unset environment variables resolve to null without raising errors",
+            "properties": {
+                "username": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "JMComic account username or ${ENV_VAR} placeholder (e.g., '${JM_USERNAME}')"
+                },
+                "password": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "JMComic account password or ${ENV_VAR} placeholder (e.g., '${JM_PASSWORD}'). When paired with username, JMComic logs in lazily on demand"
+                },
+                "cookies": {
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "default": null,
+                    "description": "Session cookies (e.g., AVS). Overrides legacy client.postman.meta_data.cookies. Values support ${ENV_VAR} placeholders",
+                    "properties": {
+                        "AVS": {
+                            "type": "string",
+                            "description": "AVS session cookie value or ${ENV_VAR} placeholder"
+                        }
+                    },
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": false
         },
         "client": {
             "type": "object",
@@ -29,12 +78,19 @@
                     "description": "Client implementation type. 'html' for web client (IP restricted but efficient), 'api' for APP client (no IP restriction, better compatibility)"
                 },
                 "async_impl": {
-                    "type": "string",
-                    "enum": [
-                        "async_api"
+                    "type": [
+                        "string",
+                        "null"
                     ],
-                    "default": "async_api",
-                    "description": "Async client implementation used by jmcomic native async APIs"
+                    "enum": [
+                        "async_api",
+                        "async_html",
+                        "api",
+                        "html",
+                        null
+                    ],
+                    "default": null,
+                    "description": "Async client implementation used by jmcomic native async APIs. Defaults to null (auto-follows client.impl: 'html' -> 'async_html', 'api' -> 'async_api')"
                 },
                 "cache": {
                     "oneOf": [
@@ -97,9 +153,37 @@
                     "type": "object",
                     "description": "Request configuration",
                     "properties": {
+                        "type": {
+                            "type": "string",
+                            "default": "curl_cffi",
+                            "description": "HTTP client backend type (default: 'curl_cffi')"
+                        },
                         "meta_data": {
                             "type": "object",
                             "properties": {
+                                "impersonate": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "default": "chrome",
+                                    "description": "Browser TLS fingerprint to impersonate"
+                                },
+                                "headers": {
+                                    "type": [
+                                        "object",
+                                        "null"
+                                    ],
+                                    "default": null,
+                                    "description": "Custom HTTP headers"
+                                },
+                                "timeout": {
+                                    "type": [
+                                        "number",
+                                        "null"
+                                    ],
+                                    "description": "HTTP request timeout in seconds"
+                                },
                                 "proxies": {
                                     "oneOf": [
                                         {
@@ -108,12 +192,13 @@
                                         },
                                         {
                                             "type": "string",
-                                            "enum": [
+                                            "examples": [
                                                 "system",
                                                 "clash",
-                                                "v2ray"
+                                                "v2ray",
+                                                "127.0.0.1:7890"
                                             ],
-                                            "description": "Predefined proxy type or proxy address (e.g., '127.0.0.1:7890')"
+                                            "description": "Predefined proxy type ('system', 'clash', 'v2ray') or proxy address (e.g., '127.0.0.1:7890')"
                                         },
                                         {
                                             "type": "object",
@@ -137,11 +222,11 @@
                                         "object",
                                         "null"
                                     ],
-                                    "description": "Account cookies for login. Only AVS cookie is needed. Must match the domain being accessed",
+                                    "description": "Legacy fallback account cookies (prefer top-level auth.cookies in option v2.1)",
                                     "properties": {
                                         "AVS": {
                                             "type": "string",
-                                            "description": "AVS cookie value from browser"
+                                            "description": "AVS cookie value"
                                         }
                                     }
                                 }
@@ -246,6 +331,26 @@
             "type": "object",
             "description": "Plugin configurations. Plugins are executed at different lifecycle stages",
             "properties": {
+                "valid": {
+                    "type": "string",
+                    "enum": [
+                        "ignore",
+                        "log",
+                        "raise"
+                    ],
+                    "default": "log",
+                    "description": "Validation error handling strategy for plugin parameters"
+                },
+                "dependencies_strategy": {
+                    "type": "string",
+                    "enum": [
+                        "failed-fast",
+                        "auto-install",
+                        "ignore-only-log"
+                    ],
+                    "default": "failed-fast",
+                    "description": "Strategy when optional plugin dependencies are missing"
+                },
                 "after_init": {
                     "type": "array",
                     "description": "Plugins executed after initialization",
@@ -268,6 +373,21 @@
                                 "then": {
                                     "$ref": "#/definitions/download_progress_plugin"
                                 }
+                            },
+                            {
+                                "if": {
+                                    "properties": {
+                                        "plugin": {
+                                            "const": "favorite_folder_export"
+                                        }
+                                    },
+                                    "required": [
+                                        "plugin"
+                                    ]
+                                },
+                                "then": {
+                                    "$ref": "#/definitions/favorite_folder_export_plugin"
+                                }
                             }
                         ]
                     }
@@ -283,7 +403,26 @@
                     "type": "array",
                     "description": "Plugins executed after downloading an album",
                     "items": {
-                        "$ref": "#/definitions/plugin"
+                        "allOf": [
+                            {
+                                "$ref": "#/definitions/plugin"
+                            },
+                            {
+                                "if": {
+                                    "properties": {
+                                        "plugin": {
+                                            "const": "calibre_metadata"
+                                        }
+                                    },
+                                    "required": [
+                                        "plugin"
+                                    ]
+                                },
+                                "then": {
+                                    "$ref": "#/definitions/calibre_metadata_plugin"
+                                }
+                            }
+                        ]
                     }
                 },
                 "before_photo": {
@@ -296,6 +435,20 @@
                 "after_photo": {
                     "type": "array",
                     "description": "Plugins executed after downloading a chapter",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "before_image": {
+                    "type": "array",
+                    "description": "Plugins executed before downloading an image",
+                    "items": {
+                        "$ref": "#/definitions/plugin"
+                    }
+                },
+                "after_image": {
+                    "type": "array",
+                    "description": "Plugins executed after downloading an image",
                     "items": {
                         "$ref": "#/definitions/plugin"
                     }
@@ -338,7 +491,10 @@
                         "skip_photo_with_few_images",
                         "img2pdf",
                         "long_img",
-                        "download_progress"
+                        "download_progress",
+                        "calibre_metadata",
+                        "log_topic_filter",
+                        "advanced_retry"
                     ]
                 },
                 "log": {
@@ -421,10 +577,7 @@
                         },
                         "kwargs": {
                             "type": "object",
-                            "required": [
-                                "username",
-                                "password"
-                            ],
+                            "description": "Legacy eager-login plugin arguments (prefer top-level auth in option v2.1; username/password may be omitted when top-level auth is configured)",
                             "properties": {
                                 "username": {
                                     "type": "string",
@@ -433,6 +586,14 @@
                                 "password": {
                                     "type": "string",
                                     "description": "Password"
+                                },
+                                "impl": {
+                                    "type": "string",
+                                    "enum": [
+                                        "api",
+                                        "html"
+                                    ],
+                                    "description": "Client implementation used for login"
                                 }
                             }
                         }
@@ -516,7 +677,8 @@
                                         "photo",
                                         "album"
                                     ],
-                                    "description": "Compression level: 'photo' for per-chapter, 'album' for entire album"
+                                    "deprecated": true,
+                                    "description": "Deprecated in option v2.1: attach zip to after_album for album-level or after_photo for chapter-level archives"
                                 },
                                 "filename_rule": {
                                     "type": "string",
@@ -686,6 +848,113 @@
                                     "type": "integer",
                                     "minimum": 1,
                                     "description": "Minimum number of images required to download a chapter"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "calibre_metadata_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "required": [
+                        "kwargs"
+                    ],
+                    "properties": {
+                        "plugin": {
+                            "const": "calibre_metadata"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "required": [
+                                "dir_rule"
+                            ],
+                            "properties": {
+                                "dir_rule": {
+                                    "type": "object",
+                                    "required": [
+                                        "rule",
+                                        "base_dir"
+                                    ],
+                                    "properties": {
+                                        "base_dir": {
+                                            "type": "string"
+                                        },
+                                        "rule": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "description": "Output path rule for metadata.opf (e.g., rule='Bd/Aid/metadata.opf')"
+                                },
+                                "include_cover": {
+                                    "type": "boolean",
+                                    "default": false,
+                                    "description": "Download cover.jpg alongside metadata.opf"
+                                },
+                                "fields": {
+                                    "type": "object",
+                                    "description": "Optional Dublin Core metadata fields (e.g., language, publisher, date, title, author)",
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "additionalProperties": false
+                        }
+                    }
+                }
+            ]
+        },
+        "favorite_folder_export_plugin": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/plugin"
+                },
+                {
+                    "properties": {
+                        "plugin": {
+                            "const": "favorite_folder_export"
+                        },
+                        "kwargs": {
+                            "type": "object",
+                            "properties": {
+                                "save_dir": {
+                                    "type": "string",
+                                    "description": "Directory for exported CSV favorite files"
+                                },
+                                "zip_enable": {
+                                    "type": "boolean",
+                                    "default": false,
+                                    "description": "Compress exported CSV files into an archive"
+                                },
+                                "zip_filepath": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "Target archive path when zip_enable is true"
+                                },
+                                "zip_password": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "Optional archive password"
+                                },
+                                "delete_original_file": {
+                                    "type": "boolean",
+                                    "default": false,
+                                    "description": "Delete exported CSV files after archiving"
+                                },
+                                "max_retry": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "default": 2,
+                                    "description": "Retry attempts per folder after initial failure (0 disables retry)"
                                 }
                             }
                         }

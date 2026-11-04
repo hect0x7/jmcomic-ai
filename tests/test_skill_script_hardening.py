@@ -15,6 +15,7 @@ from jmcomic_ai.core import JmcomicService
 from jmcomic_ai.skills.jmcomic.scripts import (
     add_favorite_album,
     batch_download,
+    daily_checkin,
     delete_favorite_album,
     doctor,
     download_covers,
@@ -93,6 +94,32 @@ class TestFavoriteScripts(unittest.TestCase):
                     "title": "Example album",
                     "message": "Album is not in favorites, so nothing was removed.",
                 },
+                1,
+            ),
+            (
+                daily_checkin,
+                "daily_checkin",
+                [],
+                {"status": "checked_in", "already_checked_in": False, "code": 0, "message": "Reward +20"},
+                0,
+            ),
+            (
+                daily_checkin,
+                "daily_checkin",
+                ["--user-id", "12345"],
+                {
+                    "status": "already_checked_in",
+                    "already_checked_in": True,
+                    "code": 1,
+                    "message": "Already checked in today.",
+                },
+                0,
+            ),
+            (
+                daily_checkin,
+                "daily_checkin",
+                [],
+                {"status": "error", "already_checked_in": False, "code": -1, "message": "not logged in"},
                 1,
             ),
         )

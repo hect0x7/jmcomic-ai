@@ -41,6 +41,30 @@ class TestValidateConfigScript(unittest.TestCase):
             self.assertTrue(success, error)
             self.assertTrue(output_path.is_file())
 
+    def test_auth_and_async_impl_summary_redacts_secrets(self):
+        option = JmOption.construct(
+            {
+                "client": {"impl": "html", "async_impl": None},
+                "auth": {
+                    "username": "demo_user",
+                    "password": "CANARY_SECRET_PASSWORD_999",
+                    "cookies": {"AVS": "CANARY_COOKIE_VALUE_888"},
+                },
+            }
+        )
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout):
+            validate_config.print_config_summary(option)
+
+        output = stdout.getvalue()
+        self.assertIn("Async implementation: auto (follows impl)", output)
+        self.assertIn("Username: demo_user", output)
+        self.assertIn("Password: configured (redacted)", output)
+        self.assertIn("Cookies: configured (auth.cookies)", output)
+        self.assertNotIn("CANARY_SECRET_PASSWORD_999", output)
+        self.assertNotIn("CANARY_COOKIE_VALUE_888", output)
+
 
 if __name__ == "__main__":
     unittest.main()

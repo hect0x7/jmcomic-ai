@@ -1,6 +1,6 @@
 ---
 name: jmcomic
-description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse, add, and delete favorites, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
+description: Search, browse, inspect album-specific or site-wide comments, list favorite folders, browse, add, and delete favorites, perform daily check-in, and download manga from JMComic (18comic), obtain the latest Android APK from hect0x7/JMComic-APK, and invoke the upstream jm-view-server `jms` command for local reading. Use for manga discovery, ranking, comment analysis, favorites, daily check-in, downloads, post-processing, configuration, requests to download the JMComic APK, requests to start a local or phone-accessible manga reader, and download-then-read workflows.
 ---
 
 # JMComic Skill
@@ -14,9 +14,10 @@ Activate this skill when the user wants to:
 - Browse popular manga rankings (daily, weekly, monthly)
 - Read album-specific or site-wide comments and nested replies, including spoiler flags
 - List favorite folders, browse saved albums, add an album to favorites, or delete an album from favorites
+- Complete daily account check-in (idempotent: distinguishes newly checked in vs already checked in today)
 - Download entire albums or specific chapters (**Returns structured dict with status, paths, and metadata**)
-- Get detailed information about a manga album
-- Configure download settings (paths, concurrency, proxies)
+- Get detailed information about a manga album (API client automatically resolves sub-chapter IDs to their parent album)
+- Configure download settings (paths, concurrency, proxies, top-level `auth`)
 - Post-process downloaded content (Zip, PDF, LongImage) with **native parameters or `dir_rule`**
 - Download the latest Android APK published by `hect0x7/JMComic-APK`
 - Run `jms --help` to obtain the current upstream options, then invoke `jms` directly for an existing or newly downloaded manga directory
@@ -70,10 +71,12 @@ Use `get_forum_comments(page: int = 1)` for the latest site-wide comments. It re
 
 ### Favorites
 
-All favorite tools require an authenticated client. Call `login` in the same MCP session or configure
-valid cookies. For HTML queries authenticated only by Cookie, pass `username`; after `login`, it can
-be omitted. The API client ignores `username` and always queries the current account. Separate script
-processes need authentication in their configuration; they do not inherit an MCP session's login.
+All favorite tools require an authenticated client. Call `login` in the same MCP session, configure
+top-level `auth` (`username`/`password` or `auth.cookies`) in `option.yml`, or configure legacy postman
+cookies. For HTML queries authenticated only by Cookie without `auth.username`, pass `username`; after
+`login` or top-level `auth` login, it can be omitted. The API client ignores `username` and always
+queries the current account. Separate script processes need authentication in their configuration; they
+do not inherit an MCP session's login.
 
 **`get_favorite_folders(username: str = "")`** returns:
 
@@ -124,6 +127,25 @@ Both tools behave identically whichever client implementation the configuration 
 the album `title`. Name every affected album as `title (ID)`; when `title` is empty or absent, reuse an
 earlier search, browse, or detail result, or fetch the name with `get_album_detail(album_id)` or
 `python scripts/album_info.py --id ID`.
+
+### Daily Check-in
+
+**`daily_checkin(user_id: str = "")`** executes the account's daily check-in on either the API or HTML client and returns:
+
+```python
+{
+    "status": "checked_in" | "already_checked_in" | "error",
+    "already_checked_in": bool,
+    "code": int,       # 0 = newly checked in, 1 = already checked in today, -1 = error
+    "message": str
+}
+```
+
+Requires an authenticated session (`login` in the same MCP session, top-level `auth.username`/`auth.password`
+in `option.yml`, or valid session cookies). On the API client, `user_id` is resolved automatically after
+`login` or top-level `auth` login, and only needs to be passed explicitly for Cookie-only API configurations;
+the HTML client does not require `user_id`. Both `"checked_in"` and `"already_checked_in"` represent normal
+completion; `"error"` indicates missing credentials, invalid `user_id`, or upstream failure.
 
 ## Core Capabilities
 
@@ -197,9 +219,10 @@ download:
     image: 20  # Max concurrent image downloads
     photo: 5   # Max concurrent chapter downloads
 
-# Set proxy
+# Set proxy and async client
 client:
-  async_impl: async_api  # Used by jmcomic native async APIs
+  impl: api
+  async_impl: null       # null (default) auto-follows impl -> async_api / async_html
   cache: level_option    # Reuse metadata across clients from this option
   postman:
     meta_data:
@@ -213,19 +236,19 @@ client:
     meta_data:
       proxies: system
 
-# Configure login cookies
-client:
-  postman:
-    meta_data:
-      cookies:
-        AVS: "your_avs_cookie_value"
+# Configure account auth (option v2.1 recommended; choose credentials OR cookies, never both)
+auth:
+  username: "${JM_USERNAME}"
+  password: "${JM_PASSWORD}"
+  # Or authenticate by session cookie on impl: html (takes priority over postman cookies):
+  # cookies:
+  #   AVS: "${JM_COOKIE_AVS}"
 
-# Use plugins
+# Use plugins (zip granularity follows hook stage: after_photo vs after_album)
 plugins:
-  after_album:
+  after_photo:
     - plugin: zip
       kwargs:
-        level: photo
         suffix: zip
         delete_original_file: true
 ```
@@ -238,10 +261,11 @@ The `scripts/` directory provides utility tools for common tasks. All tools supp
 | :--- | :--- |
 | `doctor.py` | Environment diagnostics: Python version, deps, config status, network/domain checks. |
 | `check_domains.py` | Comprehensive domain health checker: tests latency, HTTP status, redirect chains (301/302), Cloudflare WAF challenges (403), and SSL validity across API and HTML candidate domains; outputs best recommended domains. |
-| `login.py` | Authenticate with JMComic (API/HTML/both), query user statistics (UID, coins, EXP, level, favorites), and optionally persist session cookies (AVS) directly to `option.yml` (`--save`). |
+| `login.py` | Authenticate with JMComic (API/HTML/both), query user statistics (UID, coins, EXP, level, favorites), and persist session cookies (`--save`) or top-level `auth` config (`--save-auth env\|password`) to `option.yml`. |
+| `daily_checkin.py` | Perform daily account check-in and print structured JSON (`checked_in` / `already_checked_in` exit 0; `error` exits 1). |
 | `batch_download.py` | Download multiple albums from a list of IDs (CLI or file) with progress/error summary. |
 | `download_photo.py` | Download specific chapters/photos without fetching whole albums. |
-| `validate_config.py` | Validate `option.yml` and convert between YAML and JSON. |
+| `validate_config.py` | Validate `option.yml` (including redacted `auth` summary) and convert between YAML and JSON. |
 | `search_export.py` | Search by keyword/ranking/category and export to CSV or JSON (multi-page); `--tags` keeps only albums carrying every given tag, `--enrich` fills per-album stats. |
 | `album_info.py` | Query detailed metadata for one or many albums; print or export to JSON. |
 | `album_comments.py` | Fetch one page of album comments and recursive replies; print or export to JSON. |
@@ -270,13 +294,14 @@ The following table clarifies how script CLI parameters map to MCP tools.
 | `favorite_albums.py` | `browse_favorite_albums` | High | `--folder-id`, `--page`, `--order-by`, `--username` map to the corresponding tool arguments. |
 | `add_favorite_album.py` | `add_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
 | `delete_favorite_album.py` | `delete_favorite_album` | High | `--id` maps to `album_id`; an error result exits non-zero. |
+| `daily_checkin.py` | `daily_checkin` | High | `--user-id` maps to `user_id`; JSON preserves the MCP result shape, and `status="error"` exits non-zero. |
 | `download_covers.py` | `download_cover` | Partial | Batch wrapper over repeated cover calls. |
 | `ranking_tracker.py` | `browse_albums` | Partial | Uses time-range/category browse semantics and exports snapshots. |
 | `batch_download.py` | `plan_download` / `download_batch` / task lifecycle | High | Shared native batch engine; `--background` launches an independent CLI worker. Query/cancel/retry with `jmai task`. |
 | `download_photo.py` | `plan_download` / `download_batch` / task lifecycle | High | Same batch engine with chapter mode fixed; supports `--background`. |
 | `validate_config.py` | `update_option` (adjacent) | None | Validation/format conversion utility; not a direct MCP tool wrapper. |
 | `download_latest_apk.py` | None | None | Reads the public `hect0x7/JMComic-APK` GitHub Release API directly. |
-| `login.py` | `login` | High | Supports `--username`, `--password`, `--impl`, `--domain`, `--proxy`, and `--save` to update option.yml. |
+| `login.py` | `login` | High | Supports `--username`, `--password`, `--impl`, `--domain`, `--proxy`, `--save`, and `--save-auth` to update `option.yml`. |
 | `check_domains.py` | None | None | Diagnostic domain health checker and benchmark utility; not a direct MCP tool wrapper. |
 
 ### Mapping Policy

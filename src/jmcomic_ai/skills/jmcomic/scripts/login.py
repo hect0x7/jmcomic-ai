@@ -87,10 +87,16 @@ def parse_args():
         "--proxy",
         help="Custom proxy URL (e.g. http://127.0.0.1:7890) or 'none'",
     )
-    parser.add_argument(
+    save_group = parser.add_mutually_exclusive_group()
+    save_group.add_argument(
         "--save",
         action="store_true",
         help="Save valid AVS cookie and working domain to option.yml upon successful login",
+    )
+    save_group.add_argument(
+        "--save-auth",
+        choices=["env", "password"],
+        help="Persist top-level auth config in option.yml ('env' writes ${JM_USERNAME}/${JM_PASSWORD}; 'password' writes credentials)",
     )
     parser.add_argument(
         "--option",
@@ -170,11 +176,23 @@ def perform_html_login(service: JmcomicService, username: str, password: str, do
 
 
 def save_credentials_to_option(
-    service: JmcomicService, avs_cookie: str, target_impl: str, working_domain: str | None
+    service: JmcomicService,
+    avs_cookie: str,
+    target_impl: str,
+    working_domain: str | None,
+    username: str | None = None,
 ) -> tuple[bool, str]:
-    """Persist AVS cookie and optionally domain/impl into option.yml."""
+    """Persist AVS cookie and working domain/impl into option.yml."""
     try:
+        # Clear any stored password so auth never mixes password + cookies.
+        auth_updates: dict = {"password": None}
+        if username:
+            auth_updates["username"] = username
+        if avs_cookie:
+            auth_updates["cookies"] = {"AVS": avs_cookie}
+
         updates: dict = {
+            "auth": auth_updates,
             "client": {
                 "postman": {
                     "meta_data": {
@@ -183,7 +201,7 @@ def save_credentials_to_option(
                         }
                     }
                 }
-            }
+            },
         }
 
         if target_impl in ("api", "html"):
@@ -191,6 +209,46 @@ def save_credentials_to_option(
 
         if working_domain and target_impl in ("api", "html"):
             updates["client"]["domain"] = [working_domain]
+
+        msg = service.update_option(updates)
+        if msg.lower().startswith("option update failed"):
+            return False, msg
+        return True, msg
+    except Exception as exc:
+        return False, str(exc)
+
+
+def save_auth_config_to_option(
+    service: JmcomicService,
+    save_auth_mode: str,
+    username: str,
+    password: str,
+    target_impl: str,
+    working_domain: str | None,
+) -> tuple[bool, str]:
+    """Persist top-level auth (env placeholders or credentials) into option.yml."""
+    try:
+        if save_auth_mode == "env":
+            auth_dict: dict = {"username": "${JM_USERNAME}", "password": "${JM_PASSWORD}", "cookies": None}
+        elif save_auth_mode == "password":
+            auth_dict = {"username": username, "password": password, "cookies": None}
+        else:
+            return False, f"unsupported save_auth mode: {save_auth_mode}"
+
+        # Clear persisted cookies so stale AVS cookies never block auto-login on impl=html.
+        client_updates: dict = {
+            "postman": {
+                "meta_data": {
+                    "cookies": None,
+                }
+            }
+        }
+        if target_impl in ("api", "html"):
+            client_updates["impl"] = target_impl
+            if working_domain:
+                client_updates["domain"] = [working_domain]
+
+        updates: dict = {"auth": auth_dict, "client": client_updates}
 
         msg = service.update_option(updates)
         if msg.lower().startswith("option update failed"):
@@ -293,7 +351,25 @@ def main():
     )
 
     # 3. Save to option.yml if requested
-    if args.save:
+    save_auth_mode = getattr(args, "save_auth", None)
+    if save_auth_mode:
+        any_login_ok = any(r.get("status") == "success" for r in results["results"].values())
+        if any_login_ok:
+            save_impl = args.impl if args.impl in ("api", "html") else "api"
+            if args.impl == "both" and results["results"].get("api", {}).get("status") != "success":
+                save_impl = "html"
+            if save_impl == "html":
+                working_domain = results["results"].get("html", {}).get("client_domain") or working_domain
+            saved, save_msg = save_auth_config_to_option(
+                service, save_auth_mode, username, password, save_impl, working_domain
+            )
+            results["saved_to_option"] = saved
+            results["save_message"] = save_msg
+        else:
+            results["save_message"] = "login verification failed; skipped saving auth"
+        if not results["saved_to_option"]:
+            results["status"] = "failed"
+    elif args.save:
         if best_avs_cookie:
             # Prefer the API result when both implementations succeeded, matching
             # the default client implementation and keeping its domain/cookie pair
@@ -303,7 +379,9 @@ def main():
                 save_impl = "html"
             if save_impl == "html":
                 working_domain = results["results"].get("html", {}).get("client_domain") or working_domain
-            saved, save_msg = save_credentials_to_option(service, best_avs_cookie, save_impl, working_domain)
+            saved, save_msg = save_credentials_to_option(
+                service, best_avs_cookie, save_impl, working_domain, username=username
+            )
             results["saved_to_option"] = saved
             results["save_message"] = save_msg
         else:
@@ -352,7 +430,12 @@ def main():
 
     print("=" * 60)
     if results.get("saved_to_option"):
-        print(f"💾 Option Update:    ✅ Saved valid AVS cookie to {results['option_path']}")
+        if save_auth_mode:
+            print(f"💾 Option Update:    ✅ Saved top-level auth ({save_auth_mode}) to {results['option_path']}")
+        else:
+            print(f"💾 Option Update:    ✅ Saved valid AVS cookie to {results['option_path']}")
+    elif save_auth_mode:
+        print(f"💾 Option Update:    ⚠️ Skipped ({results.get('save_message', 'not saved')})")
     elif args.save and not best_avs_cookie:
         print("💾 Option Update:    ⚠️ Skipped (no valid session cookie obtained)")
 

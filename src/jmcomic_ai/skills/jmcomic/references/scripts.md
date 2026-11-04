@@ -164,7 +164,7 @@ python scripts/validate_config.py option.yml --convert-to-json --output config.j
 
 **Features**:
 - ✅ Validate option.yml syntax and structure
-- ✅ Display configuration summary (client, download, directory, proxy settings)
+- ✅ Display configuration summary (client, async implementation, download, directory, proxy, and redacted `auth` settings)
 - ✅ Convert between YAML and JSON formats
 
 ## 🔍 `search_export.py` - Search and Export
@@ -217,7 +217,7 @@ python scripts/album_info.py --file album_ids.txt --output album_details.json --
 ```
 
 **Features**:
-- ✅ Query single or multiple albums
+- ✅ Query single or multiple albums (API client automatically resolves sub-chapter IDs to their parent album)
 - ✅ Display detailed metadata (title, author, likes, views, chapters, tags, description)
 - ✅ Export to JSON or print formatted summary to console
 - ✅ Create missing parent directories for JSON output
@@ -262,9 +262,9 @@ is read-only and does not post comments or replies.
 
 ## 🔐 Authentication & Session Management
 
-### `login.py` - User Login and Cookie Persistence
+### `login.py` - User Login and Credential Persistence
 
-Authenticate against the JMComic API and/or HTML endpoints, display account statistics (level, EXP, coin balance, favorite counts), and optionally save the authenticated `AVS` session cookie directly to `option.yml`:
+Authenticate against the JMComic API and/or HTML endpoints, display account statistics (level, EXP, coin balance, favorite counts), and optionally save either the authenticated `AVS` session cookie (`--save`) or top-level `option v2.1` `auth` credentials (`--save-auth`) to `option.yml`:
 
 ```bash
 # Verify both API and HTML login
@@ -272,6 +272,9 @@ python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD
 
 # Verify API login only and save the session cookie to option.yml
 python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --impl api --save
+
+# Verify login and persist ${JM_USERNAME}/${JM_PASSWORD} under top-level auth in option.yml
+python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --save-auth env
 
 # Verify HTML login with a specific domain and save credentials
 python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --impl html --domain 18comic.ink --save
@@ -290,16 +293,42 @@ python scripts/login.py -u YOUR_USERNAME -p YOUR_PASSWORD --json
 | `--domain` | Custom domain override | Auto-recommended (`18comic.ink` for HTML) |
 | `--proxy` | Custom proxy URL (e.g. `http://127.0.0.1:7890`) or `none` | Auto-detected / option |
 | `--save` | Write valid session cookie (`AVS`) and verified domain to `option.yml` | `False` |
+| `--save-auth` | Write top-level `auth` credentials (`env` for `${JM_USERNAME}`/`${JM_PASSWORD}` or `password` for explicit credentials) to `option.yml` | `None` |
 | `--option` | Path to `option.yml` file | System default |
 | `--json` | Output structured JSON result | `False` |
 
-The script delegates HTML login validation to `jmcomic>=2.7.7`, which rejects the HTTP 200 error response returned for an invalid password. A failed implementation or failed `--save` update exits non-zero.
+The script delegates HTML login validation to `jmcomic>=2.7.11`, which rejects the HTTP 200 error response returned for an invalid password. A failed implementation or failed save update exits non-zero.
 
-Saving with `--save` writes the session cookie under `client.postman.meta_data.cookies.AVS` and updates `client.impl` when specified, ensuring that subsequent CLI scripts (like `favorite_albums.py`) run with a valid authenticated session.
+Saving with `--save` writes `AVS` to `auth.cookies.AVS` (plus `auth.username` when known) alongside `client.postman.meta_data.cookies.AVS` for backward compatibility, ensuring subsequent CLI scripts (`favorite_albums.py`, `daily_checkin.py`, etc.) run with an authenticated session. `--save-auth env` is recommended when keeping secrets in environment variables rather than `option.yml`.
+
+### `daily_checkin.py` - Daily Account Check-in
+
+Perform daily JMComic check-in (supporting both API and HTML clients) and print structured JSON:
+
+```bash
+# Check in using credentials or cookies configured in option.yml
+python scripts/daily_checkin.py
+
+# API Cookie-only configuration without recorded user_id: pass explicit numeric user ID
+python scripts/daily_checkin.py --user-id 123456 --output checkin.json
+
+# Specify custom option.yml
+python scripts/daily_checkin.py --option /path/to/option.yml
+```
+
+**Parameters**:
+
+| Parameter | Tool argument | Default |
+| :--- | :--- | :--- |
+| `--user-id` | `user_id` | Empty; auto-resolved after login / top-level `auth` login (ignored by HTML client) |
+| `--output` | N/A | Optional JSON export file path |
+| `--option` | N/A | System default `option.yml` |
+
+Prints `{"status": "checked_in" | "already_checked_in" | "error", "already_checked_in": bool, "code": int, "message": str}`. Both `"checked_in"` (`code=0`) and `"already_checked_in"` (`code=1`) exit with code `0`; `"error"` (`code=-1`) exits with code `1`.
 
 ## Favorites
 
-These scripts require valid authentication in `option.yml` (configured cookies or a login plugin).
+These scripts require valid authentication in `option.yml` (top-level `auth` credentials/cookies, legacy postman cookies, or a login plugin).
 They do not inherit login state from a separate MCP session. All four support `--option` and print
 JSON results. The folder and album browsing scripts also accept `--output` to export their query
 results, creating missing parent directories. Service or export failures exit non-zero, as do

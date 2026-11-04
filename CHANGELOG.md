@@ -4,6 +4,21 @@
 
 条目分类参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 
+## [0.1.10] - 2026-11-04
+
+### Added
+- 📅 **每日签到工具与脚本**：新增 MCP 工具 `daily_checkin` 与 Skills 脚本 `daily_checkin.py`，支持复用当前登录会话或顶层 `auth` 配置执行每日签到，清晰区分首次签到（`checked_in`）与今日已签（`already_checked_in`）。
+- 🔐 **Option v2.1 认证持久化与配置摘要**：`login.py` 新增 `--save-auth env|password` 以写入顶层 `auth` 配置，并在 `--save` 时同步写入 `auth.cookies.AVS` 与兼容路径；`validate_config.py` 新增异步客户端与脱敏 `auth` 配置摘要展示。
+- 📐 **Option Schema 全量同步**：`option_schema.json` 新增顶层 `auth`、`client.async_impl`（`async_html` 及 `null` 自动跟随）、`log: "pretty"`、插件校验与依赖策略（`valid`、`dependencies_strategy`）、`before_image`/`after_image` 生命周期钩子及 `calibre_metadata` 插件定义。
+
+### Changed
+- 📦 **上游依赖升级**：将 `jmcomic` 基线提升至 `>=2.7.11,<3.0.0`，锁定 `2.7.11`，移除已退场的传递依赖 `commonx`，全面对齐上游 `option v2.1` 架构与接口变更。
+- 🧭 **Skill 与参考文档同步**：更新 `SKILL.md`、`reference.md`、`scripts.md`、`examples.md` 与 `README.md`，补充顶层 `auth`、按生命周期钩子自动推导 `zip` 打包粒度、`calibre_metadata`、API 客户端子章节 ID 自动跳转父本子及签到工作流说明。
+
+### Fixed
+- 🔑 **2.7.11 会话认证传播与按需登录**：适配上游 `client.login` 不再隐式回写 `option` 的行为，`JmcomicService.login` 将运行时认证态同步至 `option.auth` 与客户端实例，使后续下载、收藏和签到共享登录态且不落盘明文凭证；配置顶层 `auth` 账号密码时在首次网络请求前按需懒登录，保持服务启动与离线预览零网络请求；批量下载快照独立冻结 `auth` 字段避免并发串扰。
+- 🛡️ **`update_option` 环境变量占位符与日志隔离保护**：动态修改配置时保留 `option.yml` 中未展开的 `${ENV_VAR}` 占位符与 `auth.cookies`，防止被展开后的明文环境变量覆盖或被 `deconstruct_auth` 抹除；对 `log: pretty` 强制维持纯文件日志路由，确保 MCP `stdio` JSON-RPC 零标准输出污染。
+
 ## [0.1.9] - 2026-10-15
 
 ### Added
