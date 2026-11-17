@@ -3,6 +3,12 @@
 Detailed `dir_rule` usage and output-path examples for `post_process`. The SKILL.md summary
 points here; this file carries the full set of combinations.
 
+By default, `post_process` exports the whole album; pass `level: photo` to export each
+chapter separately. The standalone script defaults to `--level photo`.
+Output names default to `[JM车号]标题`; `filename_rule` overrides the name using the same
+single-segment DSL described below. A full `dir_rule` overrides both the directory and name.
+Images are read in natural filename order (1, 2, 10), excluding hidden files and directories.
+
 ## `dir_rule` Structure
 
 The `dir_rule` parameter takes a dictionary: `{"rule": "DSL_STRING", "base_dir": "BASE_PATH"}`.
@@ -18,19 +24,19 @@ The `dir_rule` parameter takes a dictionary: `{"rule": "DSL_STRING", "base_dir":
 *   **Album Level (Single ZIP for entire manga)**:
     `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics/Archives"}}`
 *   **Photo Level (Individual ZIP for each chapter)**:
-    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
+    `{"level": "photo", "dir_rule": {"rule": "Bd/Atitle/{Pindex}.zip", "base_dir": "D:/Comics/Exports"}}`
 
 ### 2. PDF Conversion (`process_type="img2pdf"`)
 *   **Album Level (One PDF for all chapters combined)**:
     `{"level": "album", "dir_rule": {"rule": "Bd/{Aauthor}-{Atitle}.pdf", "base_dir": "D:/Comics/PDFs"}}`
 *   **Photo Level (One PDF per chapter)**:
-    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
+    `{"level": "photo", "dir_rule": {"rule": "Bd/Atitle/{Pindex}.pdf", "base_dir": "D:/Comics/Chapters"}}`
 
 ### 3. Long Image Merging (`process_type="long_img"`)
 *   **Album Level (All pages combined into one huge image)**:
     `{"level": "album", "dir_rule": {"rule": "Bd/{Atitle}_Full.png", "base_dir": "D:/Comics/Long"}}`
 *   **Photo Level (One long image per chapter)**:
-    `{"level": "photo", "dir_rule": {"rule": "Bd/{Atitle}/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
+    `{"level": "photo", "dir_rule": {"rule": "Bd/Atitle/{Pindex}.png", "base_dir": "D:/Comics/Long"}}`
 
 > ⚠️ **Best Practice - Avoiding Overwrites**:
 > When processing multiple different albums (e.g., in a loop) into the same `base_dir`, ALWAYS include unique identifiers like `{Aid}` or `{Atitle}` in your `rule`. Using a static rule like `"Bd/output.pdf"` will cause subsequent albums to overwrite previous ones.

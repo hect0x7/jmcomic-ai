@@ -4,10 +4,12 @@ import functools
 import json
 import logging
 import os
+import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -1474,6 +1476,9 @@ class JmcomicService:
             params: 后处理参数字典。支持：
                 - `dir_rule`: 输出路径规则。格式: `{"rule": "Bd/{Atitle}.zip", "base_dir": "D:/Comics"}`。
                 - `delete_original_file`: 布尔值，处理完成后是否删除原始文件。
+                - `level`: album（默认整本）或 photo（每章单独导出）。
+                - `filename_rule`: 同目录 DSL 的单段规则；默认使用 [JM车号]标题。
+                - `encrypt`: ZIP/PDF 加密参数，可用 password 或 type: random。
 
         返回:
             包含以下内容的字典：
@@ -1514,12 +1519,24 @@ class JmcomicService:
                 if not photo_dir.exists():
                     continue
 
-                images = []
-                for file in sorted(photo_dir.iterdir()):
-                    if file.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".gif") and not file.name.startswith(
-                        "."
+                images: list[tuple[str, SimpleNamespace]] = []
+
+                # Natural page order also handles unpadded names such as 1, 2, 10.
+                def page_key(path: Path) -> list[tuple[int, int | str]]:
+                    return [
+                        (0, int(part)) if part.isdigit() else (1, part.lower())
+                        for part in re.split(r"(\d+)", path.name)
+                    ]
+
+                for file in sorted(photo_dir.iterdir(), key=page_key):
+                    if (
+                        file.is_file()
+                        and file.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp", ".gif")
+                        and not file.name.startswith(".")
                     ):
-                        images.append((str(file), None))
+                        # Export plugins consume the current image path and page index.
+                        image = SimpleNamespace(save_path=str(file), index=len(images) + 1)
+                        images.append((str(file), image))
 
                 if images:
                     photo_dict[photo] = images
@@ -1567,15 +1584,18 @@ class JmcomicService:
                 if path_param in actual_params and actual_params[path_param] is not None:
                     actual_params[path_param] = str(Path(actual_params[path_param]).expanduser())
 
-            if "filename_rule" not in actual_params:
-                photo_level_zip = process_type == "zip" and actual_params.get("level") == "photo"
-                actual_params["filename_rule"] = "Ptitle" if photo_level_zip else "Aid"
+            level = actual_params.pop("level", "album")
+            if level not in {"album", "photo"}:
+                raise ValueError("level must be album or photo")
+            actual_params["downloader"] = mock_downloader
 
-            actual_params.update({"album": album, "downloader": mock_downloader})
-
-            # Instantiate and invoke
+            # Invoke chapter exports with chapter context for all three plugins.
             plugin = pclass.build(self.option)
-            plugin.invoke(**actual_params)
+            if level == "photo":
+                for photo in photo_dict:
+                    plugin.invoke(photo=photo, **actual_params)
+            else:
+                plugin.invoke(album=album, **actual_params)
 
             # 4. Return the files actually registered by jmcomic 2.7.4 plugins.
             output_paths = mock_downloader.export_filepaths

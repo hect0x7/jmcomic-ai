@@ -93,7 +93,7 @@ def main():
         # the writer fail with PermissionError. Always append a filename with the
         # proper extension so the output lands INSIDE the given directory.
         ext = {"zip": "zip", "img2pdf": "pdf", "long_img": "png"}[args.type]
-        filename = "{Atitle}" if args.level == "album" else "{Aid}_{Pindex}"
+        filename = "[JM{Aid}]{Atitle}" if args.level == "album" else "[JM{Pid}]{Ptitle}"
         params["dir_rule"] = {"rule": f"Bd/{filename}.{ext}", "base_dir": args.outdir}
 
     result = service.post_process(args.id, args.type, params)

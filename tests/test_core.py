@@ -615,7 +615,7 @@ class TestPostProcessCompatibility(unittest.TestCase):
                 result = service.post_process("123", "zip")
 
             self.assertEqual("success", result["status"])
-            self.assertEqual("Aid", captured_params["filename_rule"])
+            self.assertNotIn("filename_rule", captured_params)
 
     def test_post_process_expands_user_output_paths_before_plugin_invocation(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -457,6 +457,6 @@ python scripts/post_process.py --id 123456 --type zip --dir-rule "Bd/{Atitle}/{P
 - ✅ Supports ZIP, PDF, and Long Image formats
 - ✅ Option to encrypt output (Zip/PDF)
 - ✅ Automatic cleanup of original files
-- ✅ `--outdir` writes into the given directory using a type-aware filename rule (`Bd/{name}.{ext}`) instead of resolving to the directory itself
+- ✅ `--outdir` writes into the given directory using a type-aware filename rule (`Bd/[JM{Pid}]{Ptitle}.{ext}` for chapters or `Bd/[JM{Aid}]{Atitle}.{ext}` for albums) instead of resolving to the directory itself
 - ✅ Custom output directories
 - ✅ Missing optional dependencies (img2pdf / Pillow) are pre-checked and auto-installed; `--no-install-deps` opts out

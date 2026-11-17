@@ -40,7 +40,7 @@ class TestPostProcessOutdir(unittest.TestCase):
                 self.assertTrue(rule.endswith(f".{ext}"))
                 self.assertEqual(params["dir_rule"]["base_dir"], "/tmp/out")
 
-    def test_album_level_uses_album_title_and_photo_level_uses_photo_index(self):
+    def test_album_and_photo_levels_use_upstream_default_names(self):
         album_params = self._run_main(
             ["--id", "123", "--type", "zip", "--outdir", "/tmp/out", "--level", "album"]
         )
@@ -49,7 +49,7 @@ class TestPostProcessOutdir(unittest.TestCase):
         photo_params = self._run_main(
             ["--id", "123", "--type", "zip", "--outdir", "/tmp/out", "--level", "photo"]
         )
-        self.assertIn("{Pindex}", photo_params["dir_rule"]["rule"])
+        self.assertIn("[JM{Pid}]{Ptitle}", photo_params["dir_rule"]["rule"])
 
     def test_explicit_dir_rule_is_kept_and_conflicts_are_rejected(self):
         params = self._run_main(

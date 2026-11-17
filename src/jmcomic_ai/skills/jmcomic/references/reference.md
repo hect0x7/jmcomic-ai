@@ -26,7 +26,7 @@ Controls where and how files are saved.
 
 - **`rule`**: Directory structure DSL
   - Start with `Bd` (base directory)
-  - Use `/` or `_` to separate levels
+  - Use `/` to separate levels
   - Use `Pxxx` for photo properties, `Axxx` for album properties
   - Supports f-string syntax: `Bd / Aauthor / (JM{Aid}-{Pindex})-{Pname}`
   - Default: `Bd / Ptitle`
@@ -110,7 +110,7 @@ Network client configuration.
   - **`api`**: Array of domains for API client
     - Example: `["www.jmapiproxyxxx.vip"]`
 
-- **`retry_times`**: Integer, number of retry attempts on failure (default: 5)
+- **`retry_times`**: Integer, retries after the initial request (default: 5). Requests prefer domains with fewer failures; image requests can switch image hosts. The legacy `advanced_retry` plugin is no longer needed.
 
 - **`postman`**: Request configuration
   - **`type`**: HTTP backend implementation (default: `cffi`)
@@ -268,7 +268,16 @@ Generate a Calibre `metadata.opf` sidecar file (and optional `cover.jpg`) for th
 ```
 
 #### `img2pdf` (after_photo or after_album)
-Merge images into PDF.
+Merge images into PDF. Requires `img2pdf`; encryption additionally requires `pikepdf`.
+`pdf_dir` and `filename_rule` are optional. ZIP, PDF, and long-image exports default to
+`[JM{Aid}]{Atitle}` for albums and `[JM{Pid}]{Ptitle}` for chapters. `filename_rule` uses
+the same single-segment DSL as `dir_rule`; a full `dir_rule` includes the filename and extension
+and takes precedence over separate directory and filename settings.
+
+For ZIP/PDF encryption, provide `password` or `type: random` (random takes precedence).
+An empty mapping or a missing/null fixed password is invalid. ZIP encryption requires
+`pyzipper`, or `py7zr` with `impl: 7z`. Missing dependencies and invalid settings raise errors.
+Random PDF passwords are recorded in the task log; retain it to open the output.
 ```yaml
 - plugin: img2pdf
   kwargs:

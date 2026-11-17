@@ -37,6 +37,13 @@ mention both IDs to the user. Hand off the returned file paths rather than guess
 Read [references/download_workflows.md](references/download_workflows.md) when choosing chapters,
 setting worker limits, exporting, or managing tasks. It also describes the MCP task tools for MCP clients.
 
+### Exporting Existing Images
+
+Use `post_process` for images already on disk. ZIP, PDF, and long-image exports use
+`[JM车号]标题` by default; pass `filename_rule` or a full `dir_rule` to customize the output.
+Pages are ordered naturally (1, 2, 10). PDF supports `encrypt: {type: random}` as well as
+fixed passwords; read `references/reference.md` for encryption dependencies and log handling.
+
 ### Album Comments
 
 Use `get_album_comments(album_id: str, page: int = 1)` to read one page of comments. This is a read-only tool; it does not post comments or replies.

@@ -50,7 +50,8 @@ def install() -> None:
             manifest.export_filepath_dict.setdefault(Path(path).suffix[1:], []).append(path)
 
         downloader = SimpleNamespace(
-            download_success_dict={album: {photo: [(str(image), None)]}}, record_export_filepath=record
+            download_success_dict={album: {photo: [(str(image), SimpleNamespace(save_path=str(image), index=1))]}},
+            record_export_filepath=record,
         )
         kind = JTC.get_context_value("download_type")
         for feature in kwargs.get("extra") or []:

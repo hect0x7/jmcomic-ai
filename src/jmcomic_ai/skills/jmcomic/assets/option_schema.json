@@ -472,7 +472,7 @@
             "properties": {
                 "plugin": {
                     "type": "string",
-                    "description": "Plugin name",
+                    "description": "Plugin name; advanced_retry is a compatibility no-op since 2.7.12. Configure client.retry_times instead.",
                     "enum": [
                         "usage_log",
                         "login",
@@ -682,7 +682,7 @@
                                 },
                                 "filename_rule": {
                                     "type": "string",
-                                    "description": "Naming rule for zip files. Use Pxxx for photo level, Axxx for album level"
+                                    "description": "Single-segment DSL; defaults to [JM{Aid}]{Atitle} for albums or [JM{Pid}]{Ptitle} for chapters"
                                 },
                                 "zip_dir": {
                                     "type": "string",
@@ -699,7 +699,7 @@
                                 },
                                 "dir_rule": {
                                     "type": "object",
-                                    "description": "New configuration replacing zip_dir and filename_rule",
+                                    "description": "Full output path DSL including filename and extension; takes precedence over zip_dir and filename_rule",
                                     "properties": {
                                         "base_dir": {
                                             "type": "string"
@@ -715,7 +715,7 @@
                                 },
                                 "encrypt": {
                                     "type": "object",
-                                    "description": "Encryption settings",
+                                    "description": "Encryption settings: require a non-null password or type: random. An empty mapping is invalid. ZIP requires pyzipper; 7z requires py7zr.",
                                     "properties": {
                                         "impl": {
                                             "type": "string",
@@ -734,7 +734,7 @@
                                         },
                                         "password": {
                                             "type": "string",
-                                            "description": "Fixed password (mutually exclusive with 'type')"
+                                            "description": "Fixed password; type: random takes precedence when both are supplied"
                                         }
                                     }
                                 }
@@ -800,10 +800,6 @@
                         },
                         "kwargs": {
                             "type": "object",
-                            "required": [
-                                "pdf_dir",
-                                "filename_rule"
-                            ],
                             "properties": {
                                 "pdf_dir": {
                                     "type": "string",
@@ -811,7 +807,7 @@
                                 },
                                 "filename_rule": {
                                     "type": "string",
-                                    "description": "PDF naming rule. Use Pxxx for after_photo, Axxx for after_album"
+                                    "description": "Single-segment DSL; defaults to [JM{Aid}]{Atitle} for albums or [JM{Pid}]{Ptitle} for chapters"
                                 },
                                 "encrypt": {
                                     "type": "object",
@@ -819,6 +815,26 @@
                                         "password": {
                                             "type": "string",
                                             "description": "PDF password"
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "random"
+                                            ],
+                                            "description": "Generate a random password; takes precedence over password"
+                                        }
+                                    },
+                                    "description": "Requires pikepdf and either a non-null password or type: random; an empty mapping is invalid"
+                                },
+                                "dir_rule": {
+                                    "type": "object",
+                                    "description": "Full output path DSL including filename and extension; takes precedence over pdf_dir and filename_rule",
+                                    "properties": {
+                                        "base_dir": {
+                                            "type": "string"
+                                        },
+                                        "rule": {
+                                            "type": "string"
                                         }
                                     }
                                 }
